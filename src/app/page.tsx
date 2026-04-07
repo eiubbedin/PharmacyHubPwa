@@ -14,16 +14,20 @@ type Profile = {
 type Medicine = {
   id: number;
   denumire: string | null;
+  producer: string | null;
   concentratie: string | null;
   cantitate_cutie: string | null;
   departament: string | null;
+  med_type: string | null;
 };
 
 type MedicineDraft = {
   denumire: string;
+  producer: string;
   concentratie: string;
   cantitate_cutie: string;
   departament: string;
+  med_type: string;
 };
 
 function MedicineFormModal(props: {
@@ -85,6 +89,14 @@ function MedicineFormModal(props: {
           </div>
           <div>
             <input
+              value={draft.producer}
+              onChange={(e) => setDraft((d) => ({ ...d, producer: e.target.value }))}
+              placeholder="Producător"
+              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <input
               value={draft.concentratie}
               onChange={(e) => setDraft((d) => ({ ...d, concentratie: e.target.value }))}
               placeholder="Concentrație (ex: 500mg)"
@@ -96,6 +108,14 @@ function MedicineFormModal(props: {
               value={draft.cantitate_cutie}
               onChange={(e) => setDraft((d) => ({ ...d, cantitate_cutie: e.target.value }))}
               placeholder="Cantitate/cutie (ex: x20cpr.)"
+              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <input
+              value={draft.med_type}
+              onChange={(e) => setDraft((d) => ({ ...d, med_type: e.target.value }))}
+              placeholder="Tip medicament"
               className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -162,9 +182,11 @@ export default function Home() {
   const [medicineFormSubmitLabel, setMedicineFormSubmitLabel] = useState<string>("");
   const [medicineFormInitial, setMedicineFormInitial] = useState<MedicineDraft>({
     denumire: "",
+    producer: "",
     concentratie: "",
     cantitate_cutie: "",
     departament: "IMPORT",
+    med_type: "",
   });
   const [medicineFormEditingId, setMedicineFormEditingId] = useState<number | null>(null);
   const [actionsModalOpen, setActionsModalOpen] = useState(false);
@@ -233,8 +255,10 @@ export default function Home() {
     const matchesDept = selectedDept === "TOATE" || medicine.departament === selectedDept;
     const matchesSearch = query.trim() === "" || 
       medicine.denumire?.toLowerCase().includes(query.toLowerCase()) ||
+      medicine.producer?.toLowerCase().includes(query.toLowerCase()) ||
       medicine.concentratie?.toLowerCase().includes(query.toLowerCase()) ||
-      medicine.cantitate_cutie?.toLowerCase().includes(query.toLowerCase());
+      medicine.cantitate_cutie?.toLowerCase().includes(query.toLowerCase()) ||
+      medicine.med_type?.toLowerCase().includes(query.toLowerCase());
     return matchesDept && matchesSearch;
   });
 
@@ -256,12 +280,12 @@ export default function Home() {
 
       let baseQuery = supabase
         .from("medicines")
-        .select("id, denumire, concentratie, cantitate_cutie, departament");
+        .select("id, denumire, producer, concentratie, cantitate_cutie, departament, med_type");
 
       if (trimmed) {
         const pattern = `%${trimmed.toLowerCase()}%`;
         baseQuery = baseQuery.or(
-          `denumire.ilike.${pattern},concentratie.ilike.${pattern},cantitate_cutie.ilike.${pattern}`
+          `denumire.ilike.${pattern},producer.ilike.${pattern},concentratie.ilike.${pattern},cantitate_cutie.ilike.${pattern},med_type.ilike.${pattern}`
         );
         // IMPORTANT: PostgREST may cap results (often ~1000) if no limit/range is set.
         // This was causing some medicines to never show up during search.
@@ -303,12 +327,12 @@ export default function Home() {
 
     let baseQuery = supabase
       .from("medicines")
-      .select("id, denumire, concentratie, cantitate_cutie, departament");
+      .select("id, denumire, producer, concentratie, cantitate_cutie, departament, med_type");
 
     if (trimmed) {
       const pattern = `%${trimmed.toLowerCase()}%`;
       baseQuery = baseQuery.or(
-        `denumire.ilike.${pattern},concentratie.ilike.${pattern},cantitate_cutie.ilike.${pattern}`
+        `denumire.ilike.${pattern},producer.ilike.${pattern},concentratie.ilike.${pattern},cantitate_cutie.ilike.${pattern},med_type.ilike.${pattern}`
       );
       // IMPORTANT: PostgREST may cap results (often ~1000) if no limit/range is set.
       // This was causing some medicines to never show up during search.
@@ -402,9 +426,11 @@ export default function Home() {
     setMedicineFormSubmitLabel("Salvează");
     setMedicineFormInitial({
       denumire: medicine.denumire || "",
+      producer: medicine.producer || "",
       concentratie: medicine.concentratie || "",
       cantitate_cutie: medicine.cantitate_cutie || "",
       departament: (medicine.departament || "IMPORT").toUpperCase(),
+      med_type: medicine.med_type || "",
     });
     setMedicineFormOpen(true);
   }
@@ -477,9 +503,11 @@ export default function Home() {
     setMedicineFormSubmitLabel("Adaugă");
     setMedicineFormInitial({
       denumire: "",
+      producer: "",
       concentratie: "",
       cantitate_cutie: "",
       departament: "IMPORT",
+      med_type: "",
     });
     setMedicineFormOpen(true);
   }
@@ -498,9 +526,11 @@ export default function Home() {
           .from("medicines")
           .update({
             denumire: draft.denumire.trim(),
+            producer: draft.producer.trim() ? draft.producer.trim() : null,
             concentratie: draft.concentratie.trim() ? draft.concentratie.trim() : null,
             cantitate_cutie: draft.cantitate_cutie.trim() ? draft.cantitate_cutie.trim() : null,
             departament,
+            med_type: draft.med_type.trim() ? draft.med_type.trim() : null,
           })
           .eq("id", medicineFormEditingId);
 
@@ -512,9 +542,11 @@ export default function Home() {
       } else {
         const { error: insertError } = await supabase.from("medicines").insert({
           denumire: draft.denumire.trim(),
+          producer: draft.producer.trim() ? draft.producer.trim() : null,
           concentratie: draft.concentratie.trim() ? draft.concentratie.trim() : null,
           cantitate_cutie: draft.cantitate_cutie.trim() ? draft.cantitate_cutie.trim() : null,
           departament,
+          med_type: draft.med_type.trim() ? draft.med_type.trim() : null,
         });
 
         if (insertError) {
