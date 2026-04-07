@@ -19,6 +19,14 @@ export interface PdfOrderData {
   lines: PdfOrderLine[];
 }
 
+function deptSortKey(dept: string): number {
+  const d = (dept || "").toUpperCase();
+  if (d === "IMPORT") return 0;
+  if (d === "TABLETA") return 1;
+  if (d === "TM") return 2;
+  return 99;
+}
+
 function sanitizeText(text: string): string {
   // Înlocuim diacriticele românești cu echivalente ASCII simple
   const map: Record<string, string> = {
@@ -44,8 +52,8 @@ function sanitizeText(text: string): string {
 
 export async function generateOrderPdf(order: PdfOrderData): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
-  const { width, height } = page.getSize();
+  let page = pdfDoc.addPage();
+  let { width, height } = page.getSize();
 
   const margin = 50;
   let y = height - margin;
@@ -54,6 +62,12 @@ export async function generateOrderPdf(order: PdfOrderData): Promise<Uint8Array>
   const fontText = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   const lineHeight = 14;
+
+  const ensurePage = () => {
+    page = pdfDoc.addPage();
+    ({ width, height } = page.getSize());
+    y = height - margin;
+  };
 
   const drawText = (
     text: string,
@@ -95,23 +109,89 @@ export async function generateOrderPdf(order: PdfOrderData): Promise<Uint8Array>
   }
 
   y -= lineHeight;
-  drawText("Linii comandă:", { bold: true });
+  drawText("Linii comandă (pe departamente):", { bold: true });
   y -= lineHeight;
 
-  // Linii: fiecare medicament pe două rânduri (similar cu UI-ul din aplicație)
+  const groups = new Map<string, PdfOrderLine[]>();
   for (const line of order.lines) {
-    if (y < margin + lineHeight * 3) {
-      // nouă pagină simplă
-      y = height - margin;
+    const dept = (line.departament || "NECUNOSCUT").toUpperCase();
+    const arr = groups.get(dept) ?? [];
+    arr.push(line);
+    groups.set(dept, arr);
+  }
+
+  const departments = Array.from(groups.keys()).sort((a, b) => {
+    const ka = deptSortKey(a);
+    const kb = deptSortKey(b);
+    if (ka !== kb) return ka - kb;
+    return a.localeCompare(b, "ro-RO");
+  });
+
+  const gap = 18;
+  const colWidth = (width - margin * 2 - gap) / 2;
+  const itemStep = lineHeight * 1.55;
+
+  const drawOrderLine = (x: number, yTop: number, line: PdfOrderLine) => {
+    const title = `${line.name} x${line.qty}`;
+    const info = `${line.concentratie} • ${line.cantitateCutie}`;
+    drawText(title, { x, y: yTop, size: 11, bold: true });
+    drawText(info, { x, y: yTop - lineHeight + 2, size: 9 });
+  };
+
+  for (const dept of departments) {
+    const lines = (groups.get(dept) ?? []).slice();
+    lines.sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "ro-RO", {
+        sensitivity: "base",
+        numeric: true,
+      })
+    );
+
+    let idx = 0;
+    while (idx < lines.length) {
+      // Need room for header + at least one item.
+      if (y < margin + lineHeight * 3) {
+        ensurePage();
+      }
+
+      drawText(dept, { x: margin, y, size: 13, bold: true });
+      y -= lineHeight * 1.25;
+
+      const leftX = margin;
+      const rightX = margin + colWidth + gap;
+      let leftY = y;
+      let rightY = y;
+
+      while (idx < lines.length) {
+        const canLeft = leftY >= margin + itemStep;
+        const canRight = rightY >= margin + itemStep;
+
+        if (!canLeft && !canRight) {
+          break;
+        }
+
+        if (canLeft) {
+          drawOrderLine(leftX, leftY, lines[idx]);
+          leftY -= itemStep;
+          idx += 1;
+          continue;
+        }
+
+        if (canRight) {
+          drawOrderLine(rightX, rightY, lines[idx]);
+          rightY -= itemStep;
+          idx += 1;
+          continue;
+        }
+      }
+
+      y = Math.min(leftY, rightY) - lineHeight;
+      if (idx < lines.length) {
+        ensurePage();
+      }
     }
 
-    const title = `${line.name} x${line.qty}`;
-    const info = `${line.concentratie} • ${line.cantitateCutie} • ${line.departament}`;
-
-    drawText(title, { x: margin, bold: true });
-    y -= lineHeight;
-    drawText(info, { x: margin, size: 10 });
-    y -= lineHeight * 1.5;
+    y -= lineHeight * 0.5;
   }
 
   return await pdfDoc.save();
