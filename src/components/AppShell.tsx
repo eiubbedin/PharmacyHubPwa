@@ -38,20 +38,13 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const [loggingOut, setLoggingOut] = useState(false);
   
   const isPharmacist = profileLoaded && profile?.role !== "department";
-  const isAdminPharmacist = profileLoaded && profile?.role === "pharmacist_admin";
   const menuItems = isPharmacist
     ? [
-        { href: "/comanda", label: "Comandă", icon: "🛒" },
-        { href: "/dept", label: "Departament", icon: "🏭" },
-        { href: "/", label: "Nomenclator", icon: "📋" },
-        { href: "/comenzi", label: "Istoric", icon: "📚" },
+        { href: "/", label: "Nomenclator", icon: "�" },
+        { href: "/comanda", label: "Comandă activă", icon: "�" },
+        { href: "/comenzi", label: "Istoric comenzi", icon: "📚" },
         { href: "/sugestii", label: "Sugestii", icon: "💡" },
-        ...(isAdminPharmacist
-          ? [
-              { href: "/receptie", label: "Recepție", icon: "📦" },
-              { href: "/admin", label: "Admin", icon: "🔒" },
-            ]
-          : []),
+        { href: "/receptie", label: "Recepție", icon: "📦" },
       ]
     : [
         { href: "/dept", label: "Comandă", icon: "🛒" },
@@ -221,20 +214,13 @@ export default function AppShell({
   }, []);
 
   const isPharmacist = profileLoaded && profile?.role !== "department";
-  const isAdminPharmacist = profileLoaded && profile?.role === "pharmacist_admin";
   const desktopTabs = isPharmacist
     ? [
-        { href: "/comanda", label: "Comandă" },
-        { href: "/dept", label: "Departament" },
         { href: "/", label: "Nomenclator" },
-        { href: "/comenzi", label: "Istoric" },
+        { href: "/comanda", label: "Comandă activă" },
+        { href: "/comenzi", label: "Istoric comenzi" },
         { href: "/sugestii", label: "Sugestii" },
-        ...(isAdminPharmacist
-          ? [
-              { href: "/receptie", label: "Recepție" },
-              { href: "/admin", label: "Admin" },
-            ]
-          : []),
+        { href: "/receptie", label: "Recepție" },
       ]
     : [
         { href: "/dept", label: "Comandă" },
