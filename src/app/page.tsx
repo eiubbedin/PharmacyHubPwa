@@ -35,11 +35,12 @@ function MedicineFormModal(props: {
   title: string;
   submitLabel: string;
   initial: MedicineDraft;
+  medTypeOptions: string[];
   saving: boolean;
   onCancel: () => void;
   onSubmit: (draft: MedicineDraft) => void;
 }) {
-  const { open, title, submitLabel, initial, saving, onCancel, onSubmit } = props;
+  const { open, title, submitLabel, initial, medTypeOptions, saving, onCancel, onSubmit } = props;
   const [draft, setDraft] = useState<MedicineDraft>(initial);
 
   useEffect(() => {
@@ -112,12 +113,18 @@ function MedicineFormModal(props: {
             />
           </div>
           <div>
-            <input
+            <select
               value={draft.med_type}
               onChange={(e) => setDraft((d) => ({ ...d, med_type: e.target.value }))}
-              placeholder="Tip medicament"
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tip medicament</option>
+              {medTypeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="pt-1">
@@ -249,6 +256,12 @@ export default function Home() {
 
   // Obține lista de departamente unice
   const departments = ["TOATE", ...Array.from(new Set(medicines.map(m => m.departament).filter(Boolean)))];
+
+  const medTypeOptions = Array.from(
+    new Set(medicines.map((m) => m.med_type).filter(Boolean))
+  ) as string[];
+
+  medTypeOptions.sort((a, b) => a.localeCompare(b, "ro-RO"));
 
   // Filtrare medicamente după departament și căutare
   const filteredMedicines = medicines.filter(medicine => {
@@ -571,6 +584,7 @@ export default function Home() {
         title={medicineFormTitle}
         submitLabel={medicineFormSubmitLabel}
         initial={medicineFormInitial}
+        medTypeOptions={medTypeOptions}
         saving={saving}
         onCancel={() => {
           if (saving) return;
