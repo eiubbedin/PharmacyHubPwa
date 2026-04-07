@@ -19,12 +19,25 @@ export interface PdfOrderData {
   lines: PdfOrderLine[];
 }
 
-function deptSortKey(dept: string): number {
-  const d = (dept || "").toUpperCase();
-  if (d === "IMPORT") return 0;
-  if (d === "TABLETA") return 1;
-  if (d === "TM") return 2;
-  return 99;
+function normalizeDepartament(deptRaw: string): string {
+  const d = (deptRaw || "").trim().toUpperCase();
+  if (!d || d === "GENERAL") return "TABLETA";
+  if (d.includes("IMPORT")) return "IMPORT";
+  if (d.includes("TM")) return "TM";
+  if (d.includes("TABLETA")) return "TABLETA";
+  return d;
+}
+
+function extractBoxClean(boxRaw: string): string {
+  const txt = String(boxRaw || "");
+  const idx = txt.toLowerCase().indexOf("x");
+  if (idx === -1 || idx + 1 >= txt.length) return "";
+  let num = "";
+  for (const ch of txt.slice(idx + 1)) {
+    if (ch >= "0" && ch <= "9") num += ch;
+    else break;
+  }
+  return num ? `x${num}` : "";
 }
 
 function sanitizeText(text: string): string {
@@ -109,37 +122,26 @@ export async function generateOrderPdf(order: PdfOrderData): Promise<Uint8Array>
   }
 
   y -= lineHeight;
-  drawText("Linii comandă (pe departamente):", { bold: true });
+  drawText("LISTA MEDICAMENTE (format concentrat, 2 coloane)", { bold: true });
   y -= lineHeight;
 
-  const groups = new Map<string, PdfOrderLine[]>();
-  for (const line of order.lines) {
-    const dept = (line.departament || "NECUNOSCUT").toUpperCase();
-    const arr = groups.get(dept) ?? [];
-    arr.push(line);
-    groups.set(dept, arr);
+  // Build entries list like Comenzi_Nou:
+  // - group by department
+  // - header lines like "=== DEPT ==="
+  // - compact single-line items: "name conc, x20 - qty"
+  const departments: Record<string, PdfOrderLine[]> = {};
+  for (const l of order.lines) {
+    const dept = normalizeDepartament(l.departament);
+    (departments[dept] ??= []).push(l);
   }
 
-  const departments = Array.from(groups.keys()).sort((a, b) => {
-    const ka = deptSortKey(a);
-    const kb = deptSortKey(b);
-    if (ka !== kb) return ka - kb;
-    return a.localeCompare(b, "ro-RO");
-  });
+  const deptKeys = Object.keys(departments).sort((a, b) =>
+    a.localeCompare(b, "ro-RO", { sensitivity: "base" })
+  );
 
-  const gap = 18;
-  const colWidth = (width - margin * 2 - gap) / 2;
-  const itemStep = lineHeight * 1.55;
-
-  const drawOrderLine = (x: number, yTop: number, line: PdfOrderLine) => {
-    const title = `${line.name} x${line.qty}`;
-    const info = `${line.concentratie} • ${line.cantitateCutie}`;
-    drawText(title, { x, y: yTop, size: 11, bold: true });
-    drawText(info, { x, y: yTop - lineHeight + 2, size: 9 });
-  };
-
-  for (const dept of departments) {
-    const lines = (groups.get(dept) ?? []).slice();
+  const entries: string[] = [];
+  for (const dept of deptKeys) {
+    const lines = departments[dept] ?? [];
     lines.sort((a, b) =>
       (a.name || "").localeCompare(b.name || "", "ro-RO", {
         sensitivity: "base",
@@ -147,51 +149,44 @@ export async function generateOrderPdf(order: PdfOrderData): Promise<Uint8Array>
       })
     );
 
-    let idx = 0;
-    while (idx < lines.length) {
-      // Need room for header + at least one item.
-      if (y < margin + lineHeight * 3) {
-        ensurePage();
-      }
+    entries.push(`=== ${dept} ===`);
+    for (const line of lines) {
+      const name = (line.name || "").trim();
+      const conc = (line.concentratie || "").trim();
+      const boxClean = extractBoxClean(line.cantitateCutie || "");
 
-      drawText(dept, { x: margin, y, size: 13, bold: true });
-      y -= lineHeight * 1.25;
+      let label = name;
+      if (conc) label += ` ${conc}`;
+      if (boxClean) label += `, ${boxClean}`;
+      entries.push(`${label} - ${line.qty}`);
+    }
+  }
 
-      const leftX = margin;
-      const rightX = margin + colWidth + gap;
-      let leftY = y;
-      let rightY = y;
+  const half = Math.ceil(entries.length / 2);
+  const colLeft = entries.slice(0, half);
+  const colRight = entries.slice(half);
 
-      while (idx < lines.length) {
-        const canLeft = leftY >= margin + itemStep;
-        const canRight = rightY >= margin + itemStep;
+  const gap = 18;
+  const colWidth = (width - margin * 2 - gap) / 2;
+  const leftX = margin;
+  const rightX = margin + colWidth + gap;
+  const rowStep = 11;
+  const fontSize = 9;
 
-        if (!canLeft && !canRight) {
-          break;
-        }
-
-        if (canLeft) {
-          drawOrderLine(leftX, leftY, lines[idx]);
-          leftY -= itemStep;
-          idx += 1;
-          continue;
-        }
-
-        if (canRight) {
-          drawOrderLine(rightX, rightY, lines[idx]);
-          rightY -= itemStep;
-          idx += 1;
-          continue;
-        }
-      }
-
-      y = Math.min(leftY, rightY) - lineHeight;
-      if (idx < lines.length) {
-        ensurePage();
-      }
+  for (let i = 0; i < half; i += 1) {
+    if (y < margin + rowStep * 2) {
+      ensurePage();
     }
 
-    y -= lineHeight * 0.5;
+    const left = colLeft[i] ?? "";
+    const right = colRight[i] ?? "";
+
+    const leftIsHeader = left.startsWith("=== ") && left.endsWith(" ===");
+    const rightIsHeader = right.startsWith("=== ") && right.endsWith(" ===");
+
+    if (left) drawText(left, { x: leftX, y, size: fontSize, bold: leftIsHeader });
+    if (right) drawText(right, { x: rightX, y, size: fontSize, bold: rightIsHeader });
+    y -= rowStep;
   }
 
   return await pdfDoc.save();
