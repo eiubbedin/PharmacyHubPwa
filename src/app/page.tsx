@@ -30,6 +30,21 @@ type MedicineDraft = {
   med_type: string;
 };
 
+function normalizeMedType(raw: string): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  const key = s.toUpperCase();
+  const mapping: Record<string, string> = {
+    RX: "RX",
+    OTC: "OTC",
+    SUPLEMENT: "SUPLEMENT",
+    "SUPLIMENT ALIMENTAR": "SUPLEMENT",
+    "DISPOZITIV MEDICAL": "DISPOZITIV MEDICAL",
+    COSMETIC: "COSMETIC",
+  };
+  return mapping[key] ?? key;
+}
+
 function MedicineFormModal(props: {
   open: boolean;
   title: string;
@@ -533,6 +548,7 @@ export default function Home() {
       const dep = (draft.departament || "IMPORT").toUpperCase();
       const allowed = ["IMPORT", "TABLETA", "TM"] as const;
       const departament = allowed.includes(dep as any) ? dep : "IMPORT";
+      const medType = normalizeMedType(draft.med_type);
 
       if (medicineFormEditingId) {
         const { error } = await supabase
@@ -543,7 +559,7 @@ export default function Home() {
             concentratie: draft.concentratie.trim() ? draft.concentratie.trim() : null,
             cantitate_cutie: draft.cantitate_cutie.trim() ? draft.cantitate_cutie.trim() : null,
             departament,
-            med_type: draft.med_type.trim() ? draft.med_type.trim() : null,
+            med_type: medType ? medType : null,
           })
           .eq("id", medicineFormEditingId);
 
@@ -559,7 +575,7 @@ export default function Home() {
           concentratie: draft.concentratie.trim() ? draft.concentratie.trim() : null,
           cantitate_cutie: draft.cantitate_cutie.trim() ? draft.cantitate_cutie.trim() : null,
           departament,
-          med_type: draft.med_type.trim() ? draft.med_type.trim() : null,
+          med_type: medType ? medType : null,
         });
 
         if (insertError) {

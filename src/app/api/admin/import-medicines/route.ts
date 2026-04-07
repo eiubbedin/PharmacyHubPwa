@@ -14,6 +14,21 @@ type MedicineRow = {
   stoc: number | null;
 };
 
+function normalizeMedType(raw: unknown): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const key = s.toUpperCase();
+  const mapping: Record<string, string> = {
+    RX: "RX",
+    OTC: "OTC",
+    SUPLEMENT: "SUPLEMENT",
+    "SUPLIMENT ALIMENTAR": "SUPLEMENT",
+    "DISPOZITIV MEDICAL": "DISPOZITIV MEDICAL",
+    COSMETIC: "COSMETIC",
+  };
+  return mapping[key] ?? key;
+}
+
 function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS || "";
   return raw
@@ -82,7 +97,7 @@ export async function POST(req: NextRequest) {
       cantitate_cutie: m?.cantitate_cutie ?? null,
       departament: m?.departament ?? null,
       producer: m?.producer ?? null,
-      med_type: m?.med_type ?? null,
+      med_type: normalizeMedType(m?.med_type),
       stoc: m?.stoc == null ? null : Number(m.stoc),
     }))
     .filter((m: MedicineRow) => Number.isFinite(m.id) && m.id > 0);
