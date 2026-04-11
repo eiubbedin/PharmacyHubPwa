@@ -69,11 +69,13 @@ export default function ComandaActivaPage() {
     }
 
     const code = typeof (insertError as any).code === "string" ? (insertError as any).code : "";
-    if (code !== "23505") {
+    // 23505 = unique violation (PK sequence out of sync)
+    // 23502 = not_null_violation (id has NOT NULL constraint without identity/sequence)
+    if (code !== "23505" && code !== "23502") {
       return { ok: false, error: insertError };
     }
 
-    // Fallback: if the PK sequence is out of sync, compute next id manually and retry.
+    // Fallback: compute next id manually and retry.
     const { data: lastRow, error: lastErr } = await supabase
       .from("order_sessions")
       .select("id")
@@ -273,29 +275,35 @@ export default function ComandaActivaPage() {
     setSaving(true);
     setError(null);
     try {
-      // Finalizează comanda curentă
-      const { error } = await supabase
+      // 1) Finalizează comanda curentă
+      const { error: finalizeError } = await supabase
         .from("order_sessions")
         .update({ status: "FINALIZATA" })
         .eq("id", session.id);
 
-      if (error) throw error;
+      if (finalizeError) throw finalizeError;
 
-      // Creează automat o nouă comandă activă
-      const today = new Date().toLocaleDateString('ro-RO', { 
-        day: '2-digit', 
-        month: 'long' 
+      // 2) Încearcă să creeze automat o nouă comandă activă
+      // Dacă acest pas eșuează, comanda rămâne totuși finalizată (și UI trebuie să reflecte asta).
+      const today = new Date().toLocaleDateString("ro-RO", {
+        day: "2-digit",
+        month: "long",
       });
       const newOrderName = `Comanda ${today}`;
-      
+
       const created = await createOrderSession({
         nume_comanda: newOrderName,
         descriere: "",
         status: "ACTIVA",
       });
 
-      if (!created.ok) throw created.error;
-      
+      if (!created.ok) {
+        console.error("Eroare la crearea comenzii noi după finalizare", created.error);
+        setError(
+          "Comanda a fost finalizată, dar nu s-a putut crea automat o comandă nouă. Apasă '➕ Comandă nouă'."
+        );
+      }
+
       await loadData();
     } catch (e) {
       console.error("Eroare la finalizarea comenzii", e);
