@@ -131,8 +131,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   async function handleLogout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try { await supabase.auth.signOut(); }
-    finally { setUserMenuOpen(false); router.push(`/login?next=${encodeURIComponent(pathname || "/")}`); setLoggingOut(false); }
+    setUserMenuOpen(false);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setLoggingOut(false);
+      window.location.href = "/login";
+    }
   }
 
   const isPharmacist = profileLoaded && profile?.role !== "department";
