@@ -146,10 +146,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const deptNav: NavItem[] = [
-    { href: "/dept", label: "Comandă", shortLabel: "Comandă", icon: <IconOrder /> },
-    { href: "/dept/alte-departamente", label: "Alte departamente", shortLabel: "Alte dept.", icon: <IconReception /> },
-    { href: "/comenzi", label: "Istoric", shortLabel: "Istoric", icon: <IconHistory /> },
-    { href: "/", label: "Nomenclator", shortLabel: "Nomenclator", icon: <IconNomenclator /> },
+    { href: "/depozit", label: "Comandă activă", shortLabel: "Comandă", icon: <IconOrder /> },
+    { href: "/depozit/istoric", label: "Istoric comenzi", shortLabel: "Istoric", icon: <IconHistory /> },
   ];
 
   const navItems = isPharmacist ? pharmacistNav : deptNav;
@@ -160,6 +158,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname?.startsWith("/comenzi")) return "Istoric comenzi";
     if (pathname?.startsWith("/sugestii")) return "Sugestii";
     if (pathname?.startsWith("/receptie")) return "Recepție";
+    if (pathname === "/depozit") return "Comandă activă";
+    if (pathname?.startsWith("/depozit/istoric")) return "Istoric comenzi";
     return "Nomenclator";
   })();
 
