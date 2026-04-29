@@ -10,164 +10,88 @@ type Profile = {
   department: "TABLETA" | "IMPORT" | "TM" | null;
 };
 
-function TabItem({ href, label }: { href: string; label: string }) {
-  const pathname = usePathname();
-  const isActive =
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+function IconNomenclator() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  );
+}
+function IconOrder() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  );
+}
+function IconHistory() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+function IconSuggestions() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+    </svg>
+  );
+}
+function IconReception() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  );
+}
 
+type NavItem = {
+  href: string;
+  label: string;
+  shortLabel: string;
+  icon: React.ReactNode;
+};
+
+function SidebarNavItem({ item }: { item: NavItem }) {
+  const pathname = usePathname();
+  const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
   return (
     <Link
-      href={href}
-      className={`flex flex-1 items-center justify-center rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+      href={item.href}
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
         isActive
-          ? "bg-blue-50 text-blue-700"
-          : "text-zinc-600 hover:bg-zinc-100"
+          ? "bg-blue-50 text-blue-600"
+          : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
       }`}
     >
-      {label}
+      <span className={isActive ? "text-blue-600" : "text-gray-400"}>{item.icon}</span>
+      <span>{item.label}</span>
     </Link>
   );
 }
 
-function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function BottomNavItem({ item }: { item: NavItem }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileLoaded, setProfileLoaded] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
-  
-  const isPharmacist = profileLoaded && profile?.role !== "department";
-  const menuItems = isPharmacist
-    ? [
-        { href: "/", label: "Nomenclator", icon: "�" },
-        { href: "/comanda", label: "Comandă activă", icon: "�" },
-        { href: "/comenzi", label: "Istoric comenzi", icon: "📚" },
-        { href: "/sugestii", label: "Sugestii", icon: "💡" },
-        { href: "/receptie", label: "Recepție", icon: "📦" },
-      ]
-    : [
-        { href: "/dept", label: "Comandă", icon: "🛒" },
-        { href: "/dept/alte-departamente", label: "Alte departamente", icon: "📦" },
-        { href: "/comenzi", label: "Istoric", icon: "📚" },
-        { href: "/", label: "Nomenclator", icon: "📋" },
-      ];
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setProfileLoaded(false);
-    supabase.auth.getUser().then(async ({ data }) => {
-      setUserEmail(data.user?.email ?? null);
-      if (!data.user) {
-        setProfile(null);
-        setProfileLoaded(true);
-        return;
-      }
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("role, department")
-        .eq("user_id", data.user.id)
-        .limit(1);
-      setProfile(((p as Profile[] | null) ?? [])[0] ?? null);
-      setProfileLoaded(true);
-    });
-  }, [isOpen]);
-
-  async function handleLogout() {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      onClose();
-      router.push(`/login?next=${encodeURIComponent(pathname || "/")}`);
-      setLoggingOut(false);
-    }
-  }
-
-  if (!isOpen) return null;
-
+  const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
-      {/* Overlay */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      
-      {/* Menu Panel */}
-      <div className="fixed bottom-0 left-0 right-0 max-h-[85vh] overflow-auto bg-white rounded-t-2xl shadow-2xl">
-        <div className="p-4 pb-6">
-          {/* Handle */}
-          <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-zinc-300" />
-          
-          {/* Menu Items */}
-          <div className="space-y-2">
-            {menuItems.map((item) => {
-              const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onClose}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-zinc-700 hover:bg-zinc-50"
-                  }`}
-                >
-                  <span className="text-lg">{item.icon}</span>
-                  <span>{item.label}</span>
-                  {isActive && (
-                    <div className="ml-auto h-2 w-2 rounded-full bg-blue-600" />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-700">
-            <div className="font-semibold text-zinc-900">Info</div>
-            <div className="mt-1">Farm. Eiub Bedin-Edis</div>
-            <div className="mt-0.5">eiubbedin@icloud.com</div>
-            <div className="mt-0.5">0040751843300</div>
-            <div className="mt-0.5">Măcin TL</div>
-          </div>
-
-          <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700">
-            <div className="font-semibold text-zinc-900">User</div>
-            <div className="mt-1 break-all text-zinc-600">{userEmail || "-"}</div>
-            <button
-              type="button"
-              disabled={loggingOut}
-              onClick={() => void handleLogout()}
-              className="mt-2 w-full rounded-xl bg-zinc-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            >
-              {loggingOut ? "Se deloghează..." : "Logout"}
-            </button>
-          </div>
-          
-          {/* Close Button */}
-          <button
-            onClick={onClose}
-            className="mt-4 w-full rounded-xl border border-zinc-300 px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            Închide
-          </button>
-        </div>
-      </div>
-    </div>
+    <Link
+      href={item.href}
+      className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2"
+    >
+      <span className={isActive ? "text-blue-600" : "text-gray-400"}>{item.icon}</span>
+      <span className={`text-[10px] font-medium ${
+        isActive ? "text-blue-600" : "text-gray-500"
+      }`}>
+        {item.shortLabel}
+      </span>
+    </Link>
   );
 }
 
-export default function AppShell({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -177,68 +101,29 @@ export default function AppShell({
 
   useEffect(() => {
     let mounted = true;
-
     async function refreshUser() {
       if (!mounted) return;
       setProfileLoaded(false);
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
-
       setUserEmail(data.user?.email ?? null);
-      if (!data.user) {
-        setProfile(null);
-        setProfileLoaded(true);
-        return;
-      }
-
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("role, department")
-        .eq("user_id", data.user.id)
-        .limit(1);
+      if (!data.user) { setProfile(null); setProfileLoaded(true); return; }
+      const { data: p } = await supabase.from("profiles").select("role, department").eq("user_id", data.user.id).limit(1);
       if (!mounted) return;
       setProfile(((p as Profile[] | null) ?? [])[0] ?? null);
       setProfileLoaded(true);
     }
-
     void refreshUser();
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(() => {
-      void refreshUser();
-    });
-
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
+    const { data: subscription } = supabase.auth.onAuthStateChange(() => void refreshUser());
+    return () => { mounted = false; subscription.subscription.unsubscribe(); };
   }, []);
-
-  const isPharmacist = profileLoaded && profile?.role !== "department";
-  const desktopTabs = isPharmacist
-    ? [
-        { href: "/", label: "Nomenclator" },
-        { href: "/comanda", label: "Comandă activă" },
-        { href: "/comenzi", label: "Istoric comenzi" },
-        { href: "/sugestii", label: "Sugestii" },
-        { href: "/receptie", label: "Recepție" },
-      ]
-    : [
-        { href: "/dept", label: "Comandă" },
-        { href: "/dept/alte-departamente", label: "Alte dept." },
-        { href: "/comenzi", label: "Istoric" },
-        { href: "/", label: "Nomenclator" },
-      ];
 
   useEffect(() => {
     if (!userMenuOpen) return;
     function onMouseDown(e: MouseEvent) {
       const el = userMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
+      if (el && e.target instanceof Node && !el.contains(e.target)) setUserMenuOpen(false);
     }
-
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [userMenuOpen]);
@@ -246,128 +131,167 @@ export default function AppShell({
   async function handleLogout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setUserMenuOpen(false);
-      router.push(`/login?next=${encodeURIComponent(pathname || "/")}`);
-      setLoggingOut(false);
-    }
+    try { await supabase.auth.signOut(); }
+    finally { setUserMenuOpen(false); router.push(`/login?next=${encodeURIComponent(pathname || "/")}`); setLoggingOut(false); }
   }
 
+  const isPharmacist = profileLoaded && profile?.role !== "department";
+
+  const pharmacistNav: NavItem[] = [
+    { href: "/", label: "Nomenclator", shortLabel: "Nomenclator", icon: <IconNomenclator /> },
+    { href: "/comanda", label: "Comandă activă", shortLabel: "Comandă", icon: <IconOrder /> },
+    { href: "/comenzi", label: "Istoric comenzi", shortLabel: "Istoric", icon: <IconHistory /> },
+    { href: "/sugestii", label: "Sugestii", shortLabel: "Sugestii", icon: <IconSuggestions /> },
+    { href: "/receptie", label: "Recepție", shortLabel: "Recepție", icon: <IconReception /> },
+  ];
+
+  const deptNav: NavItem[] = [
+    { href: "/dept", label: "Comandă", shortLabel: "Comandă", icon: <IconOrder /> },
+    { href: "/dept/alte-departamente", label: "Alte departamente", shortLabel: "Alte dept.", icon: <IconReception /> },
+    { href: "/comenzi", label: "Istoric", shortLabel: "Istoric", icon: <IconHistory /> },
+    { href: "/", label: "Nomenclator", shortLabel: "Nomenclator", icon: <IconNomenclator /> },
+  ];
+
+  const navItems = isPharmacist ? pharmacistNav : deptNav;
+
+  const pageTitle = (() => {
+    if (pathname === "/comanda" || pathname === "/dept") return "Comandă activă";
+    if (pathname?.startsWith("/dept/alte")) return "Alte departamente";
+    if (pathname?.startsWith("/comenzi")) return "Istoric comenzi";
+    if (pathname?.startsWith("/sugestii")) return "Sugestii";
+    if (pathname?.startsWith("/receptie")) return "Recepție";
+    return "Nomenclator";
+  })();
+
+  const userInitial = userEmail ? userEmail[0].toUpperCase() : "U";
+
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      {/* Header desktop */}
-      <header className="sticky top-0 z-20 hidden border-b border-zinc-200 bg-white/80 px-6 py-3 backdrop-blur lg:block">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight text-zinc-900">
-              Comenzi Medicamente F35
-            </h1>
-            <p className="text-xs text-zinc-500">
-              {pathname === "/comanda"
-                ? "Comandă activă"
-                : pathname === "/dept"
-                ? "Comandă activă"
-                : pathname === "/comenzi"
-                ? "Istoric comenzi"
-                : pathname === "/sugestii"
-                ? "Sugestii medicamente"
-                : pathname === "/receptie"
-                ? "Recepție comenzi"
-                : "Nomenclator medicamente"}
-            </p>
+    <div className="min-h-screen bg-gray-100">
+      {/* ── Desktop layout ── */}
+      <div className="hidden lg:flex lg:min-h-screen">
+        {/* Sidebar */}
+        <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-gray-200 bg-white">
+          {/* Logo */}
+          <div className="flex h-14 items-center gap-3 border-b border-gray-200 px-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+              <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-gray-900">PharmacyHub</div>
+              <div className="text-[11px] text-gray-400">F35 Comenzi</div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <nav className="flex items-center gap-2 text-xs">
-              {desktopTabs.map((t) => (
-                <TabItem key={t.href} href={t.href} label={t.label} />
-              ))}
-            </nav>
+
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+            {navItems.map((item) => (
+              <SidebarNavItem key={item.href} item={item} />
+            ))}
+          </nav>
+
+          {/* User section */}
+          <div className="border-t border-gray-200 p-3">
             <div className="relative" ref={userMenuRef}>
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((v) => !v)}
-                className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-50"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
               >
-                {userEmail || "User"}
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                  {userInitial}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium text-gray-800">{userEmail || "—"}</div>
+                  <div className="text-[10px] text-gray-400">{profile?.role ?? "—"}</div>
+                </div>
+                <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
               {userMenuOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-56 rounded-xl border border-zinc-200 bg-white p-2 text-xs shadow-lg"
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <div className="px-2 py-1 text-zinc-600 break-all">
-                    {userEmail || "-"}
-                  </div>
+                <div className="absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg" onMouseDown={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     disabled={loggingOut}
                     onClick={() => void handleLogout()}
-                    className="mt-1 w-full rounded-lg bg-zinc-900 px-3 py-2 text-left text-xs font-semibold text-white disabled:opacity-60"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
                   >
-                    {loggingOut ? "Se deloghează..." : "Logout"}
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    {loggingOut ? "Se deloghează..." : "Deconectare"}
                   </button>
                 </div>
               )}
             </div>
           </div>
-        </div>
-      </header>
+        </aside>
 
-      {/* Header mobil */}
-      <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/80 px-4 py-3 backdrop-blur lg:hidden">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex-1">
-            <h1 className="text-base font-semibold tracking-tight text-zinc-900">
-              Comenzi F35
-            </h1>
-            <p className="text-xs text-zinc-500">
-              {pathname === "/comanda"
-                ? "Comandă activă"
-                : pathname === "/dept"
-                ? "Comandă activă"
-                : pathname === "/comenzi"
-                ? "Istoric comenzi"
-                : pathname === "/sugestii"
-                ? "Sugestii medicamente"
-                : pathname === "/receptie"
-                ? "Recepție comenzi"
-                : "Nomenclator medicamente"}
-            </p>
-          </div>
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+        {/* Main content */}
+        <div className="ml-60 flex min-h-screen flex-1 flex-col">
+          <header className="sticky top-0 z-20 flex h-14 items-center border-b border-gray-200 bg-white px-6">
+            <h1 className="text-base font-semibold text-gray-900">{pageTitle}</h1>
+          </header>
+          <main className="flex-1 px-6 py-5">
+            {children}
+          </main>
+          <footer className="border-t border-gray-200 px-6 py-3 text-xs text-gray-400">
+            Farm. Eiub Bedin-Edis · Măcin TL
+          </footer>
         </div>
-      </header>
-
-      <div className="mx-auto max-w-5xl pb-16 sm:pb-0">
-        {children}
-        <footer className="mt-8 border-t border-zinc-200 px-4 py-4 text-xs text-zinc-600 sm:px-6">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="font-medium text-zinc-800">Farm. Eiub Bedin-Edis</div>
-            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-              <span>eiubbedin@icloud.com</span>
-              <span className="hidden sm:inline">•</span>
-              <span>0040751843300</span>
-              <span className="hidden sm:inline">•</span>
-              <span>Măcin TL</span>
-            </div>
-          </div>
-        </footer>
       </div>
 
-      {/* Mobile Menu */}
-      <MobileMenu 
-        isOpen={isMobileMenuOpen} 
-        onClose={() => setIsMobileMenuOpen(false)} 
-      />
+      {/* ── Mobile layout ── */}
+      <div className="flex flex-col lg:hidden">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
+              <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+            </div>
+            <span className="text-sm font-semibold text-gray-900">{pageTitle}</span>
+          </div>
+          <div className="relative" ref={userMenuRef}>
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700"
+            >
+              {userInitial}
+            </button>
+            {userMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="px-2 py-1 text-xs text-gray-500 break-all">{userEmail || "—"}</div>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  type="button"
+                  disabled={loggingOut}
+                  onClick={() => void handleLogout()}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  {loggingOut ? "Se deloghează..." : "Deconectare"}
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <main className="flex-1 pb-20 px-4 py-4">
+          {children}
+        </main>
+
+        <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-gray-200 bg-white">
+          {navItems.map((item) => (
+            <BottomNavItem key={item.href} item={item} />
+          ))}
+        </nav>
+      </div>
     </div>
   );
 }

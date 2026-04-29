@@ -594,7 +594,7 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="flex flex-col gap-3">
       <MedicineFormModal
         open={medicineFormOpen}
         title={medicineFormTitle}
@@ -610,52 +610,52 @@ export default function Home() {
         onSubmit={(draft) => void handleSubmitMedicineForm(draft)}
       />
 
+      {/* Actions sheet */}
       {actionsModalOpen && actionsMedicine && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-4 py-6 sm:items-center"
-          onMouseDown={(e) => {
-            if (e.currentTarget === e.target && !saving) setActionsModalOpen(false);
-          }}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6 sm:items-center sm:pb-0"
+          onMouseDown={(e) => { if (e.currentTarget === e.target && !saving) setActionsModalOpen(false); }}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-white shadow-xl"
+            className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-zinc-200 px-5 py-4">
-              <div className="text-base font-semibold text-zinc-900">
-                {actionsMedicine.denumire || "Medicament"}
-              </div>
+            <div className="border-b border-gray-100 px-5 py-4">
+              <p className="text-base font-semibold text-gray-900 truncate">{actionsMedicine.denumire || "Medicament"}</p>
+              {actionsMedicine.producer && (
+                <p className="mt-0.5 text-xs text-gray-500">{actionsMedicine.producer}</p>
+              )}
             </div>
-            <div className="space-y-2 px-5 py-4">
+            <div className="p-2 space-y-1">
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => {
-                  setActionsModalOpen(false);
-                  void handleEditMedicine(actionsMedicine);
-                }}
-                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                onClick={() => { setActionsModalOpen(false); void handleEditMedicine(actionsMedicine); }}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60 transition-colors"
               >
+                <svg className="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
                 Editează
               </button>
               {!isDepartment && !isPharmacistStaff && (
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => {
-                    setActionsModalOpen(false);
-                    void handleDeleteMedicine(actionsMedicine);
-                  }}
-                  className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  onClick={() => { setActionsModalOpen(false); void handleDeleteMedicine(actionsMedicine); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
                 >
-                  Șterge
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Șterge din nomenclator
                 </button>
               )}
               <button
                 type="button"
                 disabled={saving}
                 onClick={() => setActionsModalOpen(false)}
-                className="w-full rounded-xl bg-zinc-100 px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60"
+                className="w-full rounded-xl px-4 py-3 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-60 transition-colors"
               >
                 Anulează
               </button>
@@ -663,162 +663,161 @@ export default function Home() {
           </div>
         </div>
       )}
-      <header className="flex flex-col gap-3 border-b border-zinc-200 pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            Comenzi Medicamente F35
-          </h1>
-          <p className="text-sm text-zinc-600">
-            Nomenclator medicamente (date în timp real din Supabase).
-          </p>
+
+      {/* Search + New */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Caută medicament..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-9 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex flex-1">
-            <input
-              type="text"
-              placeholder="Caută medicament..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-zinc-700">Departament:</label>
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        <button
+          type="button"
+          onClick={handleCreateMedicine}
+          disabled={saving}
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          <span className="hidden sm:inline">Medicament nou</span>
+          <span className="sm:hidden">Nou</span>
+        </button>
+      </div>
+
+      {/* Dept filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {departments.map((dept) => {
+          const active = selectedDept === (dept || "TOATE");
+          return (
+            <button
+              key={dept || "TOATE"}
+              type="button"
+              onClick={() => setSelectedDept(dept || "TOATE")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                active
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+              }`}
             >
-              {departments.map((dept) => (
-                <option key={dept || 'TOATE'} value={dept || 'TOATE'}>
-                  {dept || 'TOATE'}
-                </option>
-              ))}
-            </select>
-          </div>
+              {dept || "TOATE"}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Count */}
+      <p className="text-xs text-gray-400">
+        {loading ? "Se încarcă..." : `${filteredMedicines.length} medicamente`}
+      </p>
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
-      </header>
+      )}
 
-      <section className="rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-          <div className="flex flex-col">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-700">
-              Lista medicamentelor
-            </h2>
-            <span className="text-xs text-zinc-500">
-              {loading
-                ? "Se încarcă..."
-                : `Total: ${filteredMedicines.length} înregistrări`}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleCreateMedicine}
-            disabled={saving}
-            className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
-          >
-            + Medicament nou
-          </button>
+      {/* Loading */}
+      {loading && (
+        <div className="space-y-px overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {[...Array(10)].map((_, i) => (
+            <div key={i} className="h-14 animate-pulse bg-gray-50" />
+          ))}
         </div>
+      )}
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-zinc-50 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              <tr>
-                <th className="px-3 py-2 sm:px-4">Produs</th>
-                <th className="px-3 py-2 sm:px-4 text-right">Acțiuni</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 bg-white">
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-sm text-zinc-500"
-                  >
-                    Se încarcă medicamentele...
-                  </td>
-                </tr>
-              )}
-
-              {!loading && error && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-sm text-red-600"
-                  >
-                    {error}
-                  </td>
-                </tr>
-              )}
-
-              {!loading && !error &&
-                filteredMedicines.map((m) => (
-                  (() => {
-                    const inOrder = !isDepartment && activeOrderMedicineIds.includes(m.id);
-                    return (
-                  <tr
-                    key={m.id}
-                    className={`cursor-default border-t border-zinc-100 odd:bg-white even:bg-zinc-50/60 ${
-                      inOrder ? "bg-blue-50/60" : ""
-                    }`}
-                  >
-                    <td className="px-3 py-2 sm:px-4 align-top">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium text-zinc-900">
-                          {m.denumire || "-"}
-                        </div>
-                        {inOrder && (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">
-                            În comandă
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-xs text-zinc-500">
-                        {m.concentratie || "-"}
-                        {m.cantitate_cutie ? ` • ${m.cantitate_cutie}` : ""}
-                        {m.departament ? ` • ${m.departament}` : ""}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {!isDepartment && (
-                        <button
-                          type="button"
-                          disabled={saving}
-                          onClick={() => handleAddToActiveOrder(m)}
-                          className="inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          Adaugă
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => handleMedicineActions(m)}
-                        className="ml-2 inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-60"
-                      >
-                        ⋯
-                      </button>
-                    </td>
-                  </tr>
-                    );
-                  })()
-                ))}
-
-              {!loading && !error && filteredMedicines.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-sm text-zinc-500"
-                  >
-                    Nu există medicamente care corespund filtrelor.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* Empty */}
+      {!loading && !error && filteredMedicines.length === 0 && (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400">
+          Nu există medicamente care corespund filtrelor.
         </div>
-      </section>
-    </main>
+      )}
+
+      {/* Medicine list — iOS grouped list style */}
+      {!loading && !error && filteredMedicines.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {filteredMedicines.map((m, idx) => {
+            const inOrder = !isDepartment && activeOrderMedicineIds.includes(m.id);
+            return (
+              <div
+                key={m.id}
+                className={`flex items-center gap-3 px-4 py-3 ${
+                  idx < filteredMedicines.length - 1 ? "border-b border-gray-100" : ""
+                }`}
+              >
+                {/* Left content */}
+                <div className="min-w-0 flex-1">
+                  {/* Line 1: name + concentration */}
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className={`text-sm leading-snug ${inOrder ? "font-semibold text-green-600" : "font-medium text-gray-900"}`}>
+                      {m.denumire || "—"}
+                    </span>
+                    {m.concentratie && (
+                      <span className={`text-sm ${inOrder ? "text-green-500" : "text-gray-500"}`}>
+                        {m.concentratie}
+                      </span>
+                    )}
+                  </div>
+                  {/* Line 2: dept | type | producer */}
+                  <p className="mt-0.5 text-xs text-gray-400 truncate">
+                    {[m.departament, m.med_type, m.producer].filter(Boolean).join(" | ")}
+                  </p>
+                  {/* Line 3: cantitate cutie */}
+                  {m.cantitate_cutie && (
+                    <p className="text-[11px] text-gray-300">{m.cantitate_cutie}</p>
+                  )}
+                </div>
+
+                {/* Right: actions */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {!isDepartment && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => handleAddToActiveOrder(m)}
+                      className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60 transition-colors ${
+                        inOrder
+                          ? "bg-green-50 text-green-700 hover:bg-green-100"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      {inOrder ? "Mod." : "Add"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleMedicineActions(m)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-60 transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

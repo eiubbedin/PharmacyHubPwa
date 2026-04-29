@@ -160,7 +160,7 @@ export default function ReceptiePage() {
           .in("order_id", ids);
 
         if (stErr) {
-          console.error("Eroare la încărcarea statusurilor", stErr);
+          console.warn("Eroare la încărcarea statusurilor", stErr);
         } else {
           for (const row of ((statuses ?? []) as { order_id: number; status: LineStatus }[])) {
             statusMap[row.order_id] = row.status;
@@ -178,7 +178,7 @@ export default function ReceptiePage() {
           .in("order_id", ids);
 
         if (recErr) {
-          console.error("Eroare la încărcarea recepției salvate", recErr);
+          console.warn("Eroare la încărcarea recepției salvate", recErr);
         } else {
           for (const row of ((recRows ?? []) as { order_id: number; cantitate_primita: number }[])) {
             receivedQtyMap[row.order_id] = row.cantitate_primita;

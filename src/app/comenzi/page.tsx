@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import jsPDF from "jspdf";
 
 type Profile = {
   role: "pharmacist_admin" | "pharmacist_staff" | "department";
@@ -20,12 +21,262 @@ interface OrderSession {
   total_cantitate: number | null;
 }
 
+interface OrderLine {
+  id: number;
+  qty: number;
+  denumire: string;
+  concentratie: string;
+  cantitate_cutie: string;
+  departament: string;
+  med_type: string;
+}
+
+function normalizeDept(raw: string): string {
+  const d = (raw ?? "").trim().toUpperCase();
+  if (!d || d === "GENERAL") return "TABLETA";
+  if (d.includes("IMPORT")) return "IMPORT";
+  if (d.includes("TM")) return "TM";
+  if (d.includes("TABLETA")) return "TABLETA";
+  return d;
+}
+
+function boxClean(box: string): string {
+  const lower = (box ?? "").toLowerCase();
+  const idx = lower.indexOf("x");
+  if (idx === -1) return "";
+  const after = lower.slice(idx + 1);
+  const digits = after.match(/^\d+/)?.[0] ?? "";
+  return digits ? `x${digits}` : "";
+}
+
+async function generatePdf(session: OrderSession): Promise<void> {
+  const { data: rawLines, error: linesError } = await supabase
+    .from("orders")
+    .select("id, cantitate_comandata, medicament_id")
+    .eq("order_session_id", session.id);
+
+  if (linesError || !rawLines || rawLines.length === 0) {
+    alert("Nu s-au putut încărca liniile comenzii.");
+    return;
+  }
+
+  const medIds = (rawLines as any[]).map((r) => r.medicament_id);
+  const { data: medsData, error: medsError } = await supabase
+    .from("medicines")
+    .select("id, denumire, concentratie, cantitate_cutie, departament, med_type")
+    .in("id", medIds);
+
+  if (medsError) {
+    alert("Nu s-au putut încărca datele medicamentelor.");
+    return;
+  }
+
+  const medsMap: Record<number, any> = {};
+  for (const m of (medsData ?? []) as any[]) {
+    medsMap[m.id] = m;
+  }
+
+  const lines: OrderLine[] = (rawLines as any[]).map((r) => {
+    const med = medsMap[r.medicament_id] ?? {};
+    return {
+      id: r.id,
+      qty: r.cantitate_comandata ?? 1,
+      denumire: med.denumire ?? "",
+      concentratie: med.concentratie ?? "",
+      cantitate_cutie: med.cantitate_cutie ?? "",
+      departament: med.departament ?? "",
+      med_type: med.med_type ?? "",
+    };
+  });
+
+  if (lines.length === 0) {
+    alert("Comanda nu are produse de exportat.");
+    return;
+  }
+
+  // Group by dept
+  const deptMap: Record<string, OrderLine[]> = {};
+  for (const l of lines) {
+    const dept = normalizeDept(l.departament);
+    if (!deptMap[dept]) deptMap[dept] = [];
+    deptMap[dept].push(l);
+  }
+  const entries: string[] = [];
+  for (const dept of Object.keys(deptMap).sort()) {
+    const sorted = deptMap[dept].sort((a, b) =>
+      a.denumire.toLowerCase().localeCompare(b.denumire.toLowerCase())
+    );
+    entries.push(`=== ${dept} ===`);
+    for (const o of sorted) {
+      let label = o.denumire.trim();
+      if (o.concentratie.trim()) label += ` ${o.concentratie.trim()}`;
+      const bc = boxClean(o.cantitate_cutie);
+      if (bc) label += `, ${bc}`;
+      entries.push(`${label} - ${o.qty}`);
+    }
+  }
+
+  const title = session.nume_comanda || `Comanda #${session.id}`;
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 56;
+  const maxW = pageW - margin * 2;
+  const maxY = pageH - margin;
+
+  const DARK_BLUE: [number, number, number] = [0, 51, 153];
+  const DARK_GREEN: [number, number, number] = [0, 115, 51];
+  const LIGHT_GREY: [number, number, number] = [230, 230, 230];
+  const ROW_GREY: [number, number, number] = [240, 240, 240];
+  const HEADER_GREY: [number, number, number] = [140, 140, 140];
+
+  let y = margin;
+
+  // Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...DARK_BLUE);
+  doc.text("COMANDĂ MEDICAMENTE F35", pageW / 2, y, { align: "center" });
+  y += 30;
+
+  // Info table
+  const created = new Date(session.created_at);
+  const dateLabel = created.toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" });
+  const infoRows: [string, string][] = [
+    ["Nume comandă:", title],
+    ...(session.descriere && session.descriere !== "EMPTY" ? [["Descriere:", session.descriere] as [string, string]] : []),
+    ["Status:", session.status ?? "-"],
+    ["Data creare:", dateLabel],
+    ["Total medicamente:", String(session.total_medicamente ?? lines.length)],
+    ["Total cantitate:", String(session.total_cantitate ?? lines.reduce((s, l) => s + l.qty, 0))],
+  ];
+
+  const infoLeftW = 120;
+  const infoRightW = maxW - infoLeftW;
+  const infoPad = 6;
+  const infoCellH = 22;
+
+  for (const [label, value] of infoRows) {
+    doc.setFillColor(...LIGHT_GREY);
+    doc.rect(margin, y, infoLeftW, infoCellH, "F");
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y, infoLeftW, infoCellH, "S");
+    doc.rect(margin + infoLeftW, y, infoRightW, infoCellH, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text(label, margin + infoPad, y + infoCellH / 2 + 3);
+
+    doc.setFont("helvetica", "normal");
+    doc.text(value, margin + infoLeftW + infoPad, y + infoCellH / 2 + 3);
+    y += infoCellH;
+  }
+
+  y += 20;
+
+  // Section header
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...DARK_GREEN);
+  doc.text("LISTA MEDICAMENTE (format concentrat, 2 coloane)", margin, y + 14);
+  y += 24;
+
+  // 2-column table
+  const colW = maxW / 2;
+  const pad = 6;
+  const headerH = 22;
+  const cellFontSize = 9;
+
+  function drawMedsHeader(yPos: number) {
+    doc.setFillColor(...HEADER_GREY);
+    doc.rect(margin, yPos, colW, headerH, "F");
+    doc.rect(margin + colW, yPos, colW, headerH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(cellFontSize);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Medicamente", margin + pad, yPos + headerH / 2 + 3);
+    doc.text("Medicamente", margin + colW + pad, yPos + headerH / 2 + 3);
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, yPos, colW, headerH, "S");
+    doc.rect(margin + colW, yPos, colW, headerH, "S");
+  }
+
+  function drawFooter() {
+    const now = new Date().toLocaleString("ro-RO");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      `Generat: ${now} | Aplicația F35 - Comenzi Medicamente`,
+      pageW / 2,
+      pageH - margin + 14,
+      { align: "center" }
+    );
+  }
+
+  if (y + headerH > maxY - 40) { drawFooter(); doc.addPage(); y = margin; }
+  drawMedsHeader(y);
+  y += headerH;
+
+  const half = Math.ceil(entries.length / 2);
+  const leftCol = entries.slice(0, half);
+  const rightCol = entries.slice(half);
+  const rowCount = Math.max(leftCol.length, rightCol.length);
+
+  for (let i = 0; i < rowCount; i++) {
+    const leftText = i < leftCol.length ? leftCol[i] : "";
+    const rightText = i < rightCol.length ? rightCol[i] : "";
+    const rowH = 18;
+
+    if (y + rowH > maxY - 40) {
+      drawFooter();
+      doc.addPage();
+      y = margin;
+      drawMedsHeader(y);
+      y += headerH;
+    }
+
+    const bg: [number, number, number] = i % 2 === 0 ? [255, 255, 255] : ROW_GREY;
+    doc.setFillColor(...bg);
+    doc.rect(margin, y, colW, rowH, "F");
+    doc.rect(margin + colW, y, colW, rowH, "F");
+
+    const isLeftHeader = leftText.startsWith("=== ");
+    const isRightHeader = rightText.startsWith("=== ");
+
+    doc.setFont("helvetica", isLeftHeader ? "bold" : "normal");
+    doc.setFontSize(cellFontSize);
+    doc.setTextColor(0, 0, 0);
+    if (leftText) doc.text(leftText, margin + pad, y + rowH / 2 + 3, { maxWidth: colW - pad * 2 });
+
+    doc.setFont("helvetica", isRightHeader ? "bold" : "normal");
+    if (rightText) doc.text(rightText, margin + colW + pad, y + rowH / 2 + 3, { maxWidth: colW - pad * 2 });
+
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.3);
+    doc.rect(margin, y, colW, rowH, "S");
+    doc.rect(margin + colW, y, colW, rowH, "S");
+
+    y += rowH;
+  }
+
+  drawFooter();
+
+  const safeTitle = title.replace(/[/:\\]/g, "-");
+  doc.save(`${safeTitle}.pdf`);
+}
+
 export default function ComenziPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<OrderSession[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [exportingId, setExportingId] = useState<number | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -123,6 +374,17 @@ export default function ComenziPage() {
     setItems((prev) => prev.filter((s) => s.id !== session.id));
   }
 
+  async function handleExportPdf(session: OrderSession, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setExportingId(session.id);
+    try {
+      await generatePdf(session);
+    } finally {
+      setExportingId(null);
+    }
+  }
+
   async function handleRenameSession(session: OrderSession, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -161,101 +423,102 @@ export default function ComenziPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center text-sm text-zinc-600">
+      <div className="flex min-h-[200px] items-center justify-center text-sm text-gray-400">
         Se încarcă istoricul de comenzi...
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 pb-16 sm:pb-6">
-      <header className="border-b border-zinc-200 pb-3">
-        <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
-          Istoric comenzi
-        </h2>
-        <p className="text-sm text-zinc-600">
-          Toate sesiunile de comandă efectuate anterior.
-        </p>
-      </header>
-
+    <div className="flex flex-col gap-3 pb-16 sm:pb-4">
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="space-y-2 text-sm">
-        {items.map((s) => {
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        {items.map((s, idx) => {
           const created = new Date(s.created_at);
-          const dateLabel = created.toLocaleString("ro-RO", {
-            dateStyle: "short",
-            timeStyle: "short",
-          });
-
-          const statusColor =
-            s.status === "ACTIVA"
-              ? "bg-emerald-100 text-emerald-800"
-              : s.status === "FINALIZATA"
-              ? "bg-blue-100 text-blue-800"
-              : "bg-zinc-100 text-zinc-700";
+          const dateLabel = created.toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" });
+          const isActive = s.status === "ACTIVA";
+          const isFinalized = s.status === "FINALIZATA";
 
           return (
-            <Link
+            <div
               key={s.id}
-              href={`/comenzi/${s.id}`}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition hover:border-blue-300 hover:bg-blue-50/40"
+              className={`flex items-center gap-3 px-4 py-3 ${idx < items.length - 1 ? "border-b border-gray-100" : ""}`}
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-zinc-900">
-                  {s.nume_comanda || `Comandă #${s.id}`}
-                </p>
-                <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
-                  {s.descriere && s.descriere !== "EMPTY"
-                    ? s.descriere
-                    : "Fără descriere"}
-                </p>
-                <p className="mt-1 text-[11px] text-zinc-500">
-                  {dateLabel} • {s.total_medicamente ?? 0} medicamente •
-                  {" "}
-                  {s.total_cantitate ?? "-"} buc.
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1 text-right text-[11px]">
-                <span className={`rounded-full px-2 py-0.5 font-medium ${statusColor}`}>
-                  {s.status || "-"}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-600">Detalii ›</span>
-                  {!isDepartment && !isPharmacistStaff && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => handleRenameSession(s, e)}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-orange-300 text-[10px] font-semibold text-orange-600 hover:bg-orange-50"
-                        aria-label="Redenumește comanda"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteSession(s, e)}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-red-300 text-[10px] font-semibold text-red-600 hover:bg-red-50"
-                        aria-label="Șterge comanda"
-                      >
-                        🗑
-                      </button>
-                    </>
-                  )}
+              <Link href={`/comenzi/${s.id}`} className="min-w-0 flex-1 block">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`text-sm font-medium ${isActive ? "text-green-600" : "text-gray-900"}`}>
+                    {s.nume_comanda || `Comandă #${s.id}`}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    isActive ? "bg-green-100 text-green-700" :
+                    isFinalized ? "bg-blue-100 text-blue-700" :
+                    "bg-gray-100 text-gray-500"
+                  }`}>
+                    {s.status || "—"}
+                  </span>
                 </div>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  {dateLabel} · {s.total_medicamente ?? 0} med. · {s.total_cantitate ?? "-"} buc.
+                </p>
+              </Link>
+
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={exportingId === s.id}
+                  onClick={(e) => handleExportPdf(s, e)}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                >
+                  {exportingId === s.id ? (
+                    <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  ) : (
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  )}
+                  PDF
+                </button>
+                {!isDepartment && !isPharmacistStaff && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => handleRenameSession(s, e)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+                      title="Redenumește"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteSession(s, e)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      title="Șterge"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </>
+                )}
               </div>
-            </Link>
+            </div>
           );
         })}
 
         {items.length === 0 && !error && (
-          <p className="text-sm text-zinc-500">
+          <div className="px-6 py-12 text-center text-sm text-gray-400">
             Nu există comenzi înregistrate încă.
-          </p>
+          </div>
         )}
       </div>
     </div>
