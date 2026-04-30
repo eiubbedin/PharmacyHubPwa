@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { usePushNotifications } from "@/lib/usePushNotifications";
+import { useDarkMode } from "@/contexts/DarkModeContext";
 
 type Profile = {
   role: "pharmacist_admin" | "pharmacist_staff" | "department";
@@ -101,13 +102,14 @@ function BottomNavItem({ item }: { item: NavItem }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { darkMode, toggleDarkMode } = useDarkMode();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
   const [showLogoutToast, setShowLogoutToast] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const userMenuRefDesktop = useRef<HTMLDivElement | null>(null);
   const userMenuRefMobile = useRef<HTMLDivElement | null>(null);
   const { state: pushState, subscribe: subscribePush } = usePushNotifications(
@@ -198,7 +200,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const userInitial = userEmail ? userEmail[0].toUpperCase() : "U";
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
       {/* Toast logout */}
       {showLogoutToast && (
         <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
@@ -212,9 +214,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Desktop layout ── */}
       <div className="hidden lg:flex lg:min-h-screen">
         {/* Sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-gray-200 bg-white">
+        <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           {/* Logo */}
-          <div className="flex h-14 items-center border-b border-gray-200 px-4">
+          <div className="flex h-14 items-center border-b border-gray-200 dark:border-gray-700 px-4">
             <Image
               src="/logo-heliofarm.png"
               alt="Farmaciile Heliofarm"
@@ -232,24 +234,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
+          {/* Dark mode toggle */}
+          <div className="px-3 pb-2">
+            <button
+              onClick={toggleDarkMode}
+              className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              {darkMode ? (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+              {darkMode ? "Mod luminos" : "Mod întunecat"}
+            </button>
+          </div>
+
           {/* Push notifications button – doar pentru department */}
           {profile?.role === "department" && pushState !== "unsupported" && (
-            <div className="px-3 pb-1">
+            <div className="px-3 pb-4">
               <button
-                type="button"
                 disabled={pushState === "loading" || pushState === "granted" || pushState === "denied"}
                 onClick={() => void subscribePush()}
-                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+                className={`w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                   pushState === "granted"
-                    ? "bg-green-50 text-green-700 cursor-default"
+                    ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                     : pushState === "denied"
-                    ? "bg-red-50 text-red-500 cursor-default"
-                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                    : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
                 }`}
               >
-                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
                 {pushState === "granted" && "Notificări active"}
                 {pushState === "denied" && "Notificări blocate"}
                 {pushState === "prompt" && "Activează notificări"}
@@ -297,14 +314,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main content */}
-        <div className="ml-60 flex min-h-screen flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex h-14 items-center border-b border-gray-200 bg-white px-6">
+        <div className="ml-60 flex min-h-screen flex-1 flex-col bg-white dark:bg-gray-900">
+          <header className="sticky top-0 z-20 flex h-14 items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6">
             <h1 className="text-base font-semibold text-gray-900">{pageTitle}</h1>
           </header>
           <main className="flex-1 px-6 py-5">
             {children}
           </main>
-          <footer className="border-t border-gray-200 px-6 py-3 text-xs text-gray-400">
+          <footer className="border-t border-gray-200 dark:border-gray-700 px-6 py-3 text-xs text-gray-400 dark:text-gray-500">
             Farm. Eiub Bedin-Edis · Măcin TL
           </footer>
         </div>
@@ -312,7 +329,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Mobile layout ── */}
       <div className="flex flex-col lg:hidden">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4">
           <div className="flex items-center gap-3">
             <Image
               src="/logo-heliofarm.png"
@@ -322,21 +339,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               className="object-contain"
               priority
             />
-            <span className="text-sm font-semibold text-gray-500">|</span>
-            <span className="text-sm font-medium text-gray-700">{pageTitle}</span>
+            <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">|</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{pageTitle}</span>
           </div>
           <div className="relative" ref={userMenuRefMobile}>
             <button
               type="button"
               onClick={() => setUserMenuOpen((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-sm font-semibold text-blue-700 dark:text-blue-300"
             >
               {userInitial}
             </button>
             {userMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
-                <div className="px-2 py-1 text-xs text-gray-500 break-all">{userEmail || "—"}</div>
-                <div className="my-1 border-t border-gray-100" />
+              <div className="absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 break-all">{userEmail || "—"}</div>
+                <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
                 <button
                   type="button"
                   disabled={loggingOut}

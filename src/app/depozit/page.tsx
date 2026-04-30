@@ -64,6 +64,43 @@ export default function DepozitPage() {
 
   useEffect(() => {
     void loadAll();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("depozit_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_sessions" },
+        () => {
+          void loadAll();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          void loadAll();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "depot_pickups" },
+        () => {
+          void loadAll();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "depot_line_checks" },
+        () => {
+          void loadAll();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -193,6 +230,19 @@ export default function DepozitPage() {
         .limit(1);
       if (error) throw error;
       setPickup(((data as DepotPickup[] | null) ?? [])[0] ?? null);
+
+      // Trimite notificare push către farmaciști
+      const sessionName = activeSession.nume_comanda || `Comandă #${activeSession.id}`;
+      await fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Comandă preluată de depozit",
+          body: `${sessionName} a fost preluată și este în pregătire.`,
+          url: "/comanda",
+          targetRole: "pharmacist",
+        }),
+      });
     } catch (e) {
       console.warn("pickup error", e);
     } finally {

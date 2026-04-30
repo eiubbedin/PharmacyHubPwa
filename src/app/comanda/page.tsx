@@ -217,6 +217,39 @@ export default function ComandaActivaPage() {
     }
 
     load();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("order_sessions_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_sessions" },
+        () => {
+          // Refresh la orice schimbare în sesiuni
+          void loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => {
+          // Refresh la orice schimbare în linii
+          void loadData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_line_status" },
+        () => {
+          // Refresh la statusuri
+          void loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [router]);
 
   useEffect(() => {

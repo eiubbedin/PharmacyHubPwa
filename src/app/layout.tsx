@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
+import { DarkModeProvider } from "@/contexts/DarkModeContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,9 +27,11 @@ export default function RootLayout({
   return (
     <html lang="ro">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50 dark:bg-gray-900 transition-colors`}
       >
-        <AppShell>{children}</AppShell>
+        <DarkModeProvider>
+          <AppShell>{children}</AppShell>
+        </DarkModeProvider>
       </body>
     </html>
   );
