@@ -38,7 +38,22 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(nextPath);
+      // Verifică rolul și redirecționează corespunzător
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("user_id", userData.user.id)
+          .limit(1);
+        const role = ((p as { role: string }[] | null) ?? [])[0]?.role;
+        if (role === "department") {
+          window.location.href = "/depozit";
+          return;
+        }
+      }
+
+      window.location.href = nextPath === "/" || !nextPath.startsWith("/depozit") ? nextPath : "/";
     } finally {
       setLoading(false);
     }

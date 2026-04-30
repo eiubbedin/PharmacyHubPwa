@@ -231,7 +231,12 @@ export default function Home() {
           .select("role, department")
           .eq("user_id", userData.user.id)
           .limit(1);
-        setProfile(((p as Profile[] | null) ?? [])[0] ?? null);
+        const prof = ((p as Profile[] | null) ?? [])[0] ?? null;
+        setProfile(prof);
+        if (prof?.role === "department") {
+          router.replace("/depozit");
+          return;
+        }
       } else {
         setProfile(null);
       }
