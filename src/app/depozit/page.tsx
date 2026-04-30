@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import jsPDF from "jspdf";
 
 type Profile = {
   role: "pharmacist_admin" | "pharmacist_staff" | "department";
@@ -28,19 +29,27 @@ type OrderLine = {
   };
 };
 
+const DEPT_ORDER = ["IMPORT", "TABLETA", "TM"];
 const DEPT_LABELS: Record<string, string> = {
   IMPORT: "IMPORT",
   TABLETA: "TABLETĂ",
   TM: "TM",
 };
 
+function normalizeDept(d: string | null | undefined): string {
+  return (d ?? "").toUpperCase().trim();
+}
+
 export default function DepozitPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [activeSession, setActiveSession] = useState<OrderSession | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
+  const [search, setSearch] = useState("");
+  const [activeDeptFilter, setActiveDeptFilter] = useState<string | null>(null);
 
   useEffect(() => {
     void loadAll();
@@ -63,12 +72,8 @@ export default function DepozitPage() {
       const p = ((profileData as Profile[] | null) ?? [])[0] ?? null;
       setProfile(p);
 
-      if (!p || p.role !== "department") {
-        router.push("/");
-        return;
-      }
+      if (!p || p.role !== "department") { router.push("/"); return; }
 
-      // Fetch comanda activa
       const { data: sessions, error: sErr } = await supabase
         .from("order_sessions")
         .select("id, nume_comanda, status, created_at")
@@ -83,7 +88,6 @@ export default function DepozitPage() {
 
       if (!active) { setLines([]); return; }
 
-      // Fetch toate liniile comenzii active (fara filtru pe departament)
       const { data: orderLines, error: lErr } = await supabase
         .from("orders")
         .select("id, cantitate_comandata, medicines(denumire, concentratie, cantitate_cutie, departament)")
@@ -95,13 +99,104 @@ export default function DepozitPage() {
       const sorted = [...raw].sort((a, b) =>
         (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
       );
-
       setLines(sorted);
     } catch (e) {
       console.warn("depozit load error", e);
       setError("Nu s-au putut încărca datele.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Grupare pe departament
+  const grouped = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const filtered = lines.filter((l) => {
+      const matchSearch = !q ||
+        (l.medicines?.denumire ?? "").toLowerCase().includes(q) ||
+        (l.medicines?.concentratie ?? "").toLowerCase().includes(q);
+      const matchDept = !activeDeptFilter ||
+        normalizeDept(l.medicines?.departament) === activeDeptFilter;
+      return matchSearch && matchDept;
+    });
+
+    const map: Record<string, OrderLine[]> = {};
+    for (const line of filtered) {
+      const dept = normalizeDept(line.medicines?.departament) || "ALTELE";
+      if (!map[dept]) map[dept] = [];
+      map[dept].push(line);
+    }
+
+    return DEPT_ORDER
+      .filter((d) => map[d]?.length)
+      .map((d) => ({ dept: d, label: DEPT_LABELS[d] ?? d, lines: map[d] }))
+      .concat(
+        Object.keys(map)
+          .filter((d) => !DEPT_ORDER.includes(d) && map[d].length)
+          .map((d) => ({ dept: d, label: d, lines: map[d] }))
+      );
+  }, [lines, search, activeDeptFilter]);
+
+  const totalFiltered = grouped.reduce((s, g) => s + g.lines.length, 0);
+
+  // Departamente unice pentru filtre
+  const deptCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const l of lines) {
+      const d = normalizeDept(l.medicines?.departament) || "ALTELE";
+      map[d] = (map[d] ?? 0) + 1;
+    }
+    return map;
+  }, [lines]);
+
+  async function handleExportPdf() {
+    if (!activeSession || lines.length === 0) return;
+    setExporting(true);
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const sessionName = activeSession.nume_comanda || `Comandă #${activeSession.id}`;
+      const dateStr = new Date(activeSession.created_at).toLocaleString("ro-RO", { dateStyle: "long", timeStyle: "short" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(sessionName, 14, 18);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(dateStr, 14, 24);
+      doc.setTextColor(0);
+
+      let y = 32;
+
+      for (const group of grouped) {
+        if (y > 270) { doc.addPage(); y = 16; }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        doc.text(`— ${group.label} (${group.lines.length}) —`, 14, y);
+        doc.setTextColor(0);
+        y += 6;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        for (const line of group.lines) {
+          if (y > 278) { doc.addPage(); y = 16; }
+          const med = line.medicines;
+          const name = med?.denumire ?? "—";
+          const conc = med?.concentratie ? ` ${med.concentratie}` : "";
+          const cutie = med?.cantitate_cutie ? ` · ${med.cantitate_cutie}` : "";
+          doc.text(`${name}${conc}${cutie}`, 18, y);
+          doc.setFont("helvetica", "bold");
+          doc.text(`x${line.cantitate_comandata}`, 185, y, { align: "right" });
+          doc.setFont("helvetica", "normal");
+          y += 5.5;
+        }
+        y += 3;
+      }
+
+      doc.save(`${sessionName.replace(/\s+/g, "_")}_depozit.pdf`);
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -116,88 +211,165 @@ export default function DepozitPage() {
   const deptLabel = profile?.department ? (DEPT_LABELS[profile.department] ?? profile.department) : "—";
 
   return (
-    <div className="flex flex-col gap-4 pb-16 sm:pb-4">
+    <div className="flex flex-col gap-3 pb-16 sm:pb-4">
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {/* Header info */}
-      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-        <p className="text-xs text-gray-400">Departament</p>
-        <p className="text-lg font-semibold text-gray-900">{deptLabel}</p>
+      {/* Header */}
+      <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+        <div>
+          <p className="text-xs text-gray-400">Conectat ca</p>
+          <p className="text-base font-semibold text-gray-900">{deptLabel}</p>
+        </div>
+        <Link
+          href="/depozit/istoric"
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          Istoric
+          <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </Link>
       </div>
 
-      {/* Link spre istoric */}
-      <Link
-        href="/depozit/istoric"
-        className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-      >
-        <span>Istoric comenzi</span>
-        <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-      </Link>
-
       {/* Comanda activa */}
-      <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Comandă activă</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Comandă activă</p>
 
-        {!activeSession && (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-400">
-            Nu există nicio comandă activă în acest moment.
-          </div>
-        )}
+      {!activeSession && (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-400">
+          Nu există nicio comandă activă în acest moment.
+        </div>
+      )}
 
-        {activeSession && (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            {/* Session header */}
-            <div className="border-b border-gray-100 px-4 py-3">
+      {activeSession && (
+        <>
+          {/* Session header + PDF */}
+          <div className="flex items-start justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <div>
               <p className="font-semibold text-gray-900">
                 {activeSession.nume_comanda || `Comandă #${activeSession.id}`}
               </p>
               <p className="mt-0.5 text-xs text-gray-400">
                 {new Date(activeSession.created_at).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })}
-                {" · "}
-                {lines.length} poziții
+                {" · "}{lines.length} poziții
               </p>
             </div>
+            <button
+              type="button"
+              disabled={exporting}
+              onClick={() => void handleExportPdf()}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+              {exporting ? "Export..." : "PDF"}
+            </button>
+          </div>
 
-            {/* Lines — read only */}
-            {lines.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                Nu există produse din departamentul {deptLabel} în această comandă.
-              </div>
+          {/* Search */}
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Caută medicament..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             )}
+          </div>
 
-            {lines.map((line, idx) => {
-              const med = line.medicines;
-              return (
-                <div
-                  key={line.id}
-                  className={`flex items-center gap-3 px-4 py-3 ${idx < lines.length - 1 ? "border-b border-gray-100" : ""}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-sm font-medium text-gray-900">{med?.denumire || "—"}</span>
-                      {med?.concentratie && (
-                        <span className="text-sm text-gray-500">{med.concentratie}</span>
+          {/* Filtre departament */}
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveDeptFilter(null)}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                !activeDeptFilter
+                  ? "bg-gray-900 text-white"
+                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              Toate ({lines.length})
+            </button>
+            {DEPT_ORDER.filter((d) => deptCounts[d]).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setActiveDeptFilter(activeDeptFilter === d ? null : d)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activeDeptFilter === d
+                    ? "bg-blue-600 text-white"
+                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {DEPT_LABELS[d] ?? d} ({deptCounts[d]})
+              </button>
+            ))}
+          </div>
+
+          {/* Linii grupate */}
+          {totalFiltered === 0 && (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-8 text-center text-sm text-gray-400">
+              Niciun produs găsit.
+            </div>
+          )}
+
+          {grouped.map((group) => (
+            <div key={group.dept} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+              {/* Dept header */}
+              <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {group.label}
+                </span>
+                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                  {group.lines.length}
+                </span>
+              </div>
+              {group.lines.map((line, idx) => {
+                const med = line.medicines;
+                return (
+                  <div
+                    key={line.id}
+                    className={`flex items-center gap-3 px-4 py-3 ${idx < group.lines.length - 1 ? "border-b border-gray-100" : ""}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-sm font-medium text-gray-900">{med?.denumire || "—"}</span>
+                        {med?.concentratie && (
+                          <span className="text-sm text-gray-500">{med.concentratie}</span>
+                        )}
+                      </div>
+                      {med?.cantitate_cutie && (
+                        <p className="text-xs text-gray-400">{med.cantitate_cutie}</p>
                       )}
                     </div>
-                    {med?.cantitate_cutie && (
-                      <p className="text-xs text-gray-400">{med.cantitate_cutie}</p>
-                    )}
+                    <span className="shrink-0 text-sm font-semibold text-green-600">
+                      x{line.cantitate_comandata}
+                    </span>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold text-green-600">
-                    x{line.cantitate_comandata}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
