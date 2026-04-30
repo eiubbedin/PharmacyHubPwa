@@ -222,9 +222,12 @@ export default function ReceptiePage() {
           order_id: orderId,
           cantitate_primita: qty,
           checked_by: userData.user.id,
+          updated_at: new Date().toISOString(),
         },
-        { onConflict: "order_id" }
-      );
+        { onConflict: "order_id", ignoreDuplicates: false }
+      )
+      .select("order_id")
+      .limit(1);
 
     if (upsertErr) {
       console.error("Eroare la autosalvarea recepției", upsertErr);
