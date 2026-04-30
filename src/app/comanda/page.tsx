@@ -283,6 +283,18 @@ export default function ComandaActivaPage() {
 
       if (finalizeError) throw finalizeError;
 
+      // Trimite push notification la userii de depozit
+      void fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Comandă nouă de preluat",
+          body: `${session.nume_comanda || `Comanda #${session.id}`} a fost finalizată și este gata de ridicare.`,
+          url: "/depozit",
+          targetRole: "department",
+        }),
+      });
+
       // 2) Încearcă să creeze automat o nouă comandă activă
       // Dacă acest pas eșuează, comanda rămâne totuși finalizată (și UI trebuie să reflecte asta).
       const today = new Date().toLocaleDateString("ro-RO", {

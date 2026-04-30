@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { usePushNotifications } from "@/lib/usePushNotifications";
 
 type Profile = {
   role: "pharmacist_admin" | "pharmacist_staff" | "department";
@@ -97,8 +98,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const userMenuRefDesktop = useRef<HTMLDivElement | null>(null);
   const userMenuRefMobile = useRef<HTMLDivElement | null>(null);
+  const { state: pushState, subscribe: subscribePush } = usePushNotifications(
+    profile?.role === "department" ? userId : null
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -108,6 +113,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
       setUserEmail(data.user?.email ?? null);
+      setUserId(data.user?.id ?? null);
       if (!data.user) { setProfile(null); setProfileLoaded(true); return; }
       const { data: p } = await supabase.from("profiles").select("role, department").eq("user_id", data.user.id).limit(1);
       if (!mounted) return;
@@ -203,6 +209,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <SidebarNavItem key={item.href} item={item} />
             ))}
           </nav>
+
+          {/* Push notifications button – doar pentru department */}
+          {profile?.role === "department" && pushState !== "unsupported" && (
+            <div className="px-3 pb-1">
+              <button
+                type="button"
+                disabled={pushState === "loading" || pushState === "granted" || pushState === "denied"}
+                onClick={() => void subscribePush()}
+                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+                  pushState === "granted"
+                    ? "bg-green-50 text-green-700 cursor-default"
+                    : pushState === "denied"
+                    ? "bg-red-50 text-red-500 cursor-default"
+                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                }`}
+              >
+                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {pushState === "granted" && "Notificări active"}
+                {pushState === "denied" && "Notificări blocate"}
+                {pushState === "prompt" && "Activează notificări"}
+                {pushState === "loading" && "Se procesează..."}
+              </button>
+            </div>
+          )}
 
           {/* User section */}
           <div className="border-t border-gray-200 p-3">
