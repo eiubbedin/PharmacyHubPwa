@@ -97,7 +97,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const userMenuRefDesktop = useRef<HTMLDivElement | null>(null);
+  const userMenuRefMobile = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -121,8 +122,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!userMenuOpen) return;
     function onMouseDown(e: MouseEvent) {
-      const el = userMenuRef.current;
-      if (el && e.target instanceof Node && !el.contains(e.target)) setUserMenuOpen(false);
+      const elD = userMenuRefDesktop.current;
+      const elM = userMenuRefMobile.current;
+      const target = e.target as Node;
+      if (
+        (!elD || !elD.contains(target)) &&
+        (!elM || !elM.contains(target))
+      ) {
+        setUserMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
@@ -198,7 +206,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* User section */}
           <div className="border-t border-gray-200 p-3">
-            <div className="relative" ref={userMenuRef}>
+            <div className="relative" ref={userMenuRefDesktop}>
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((v) => !v)}
@@ -259,7 +267,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <span className="text-sm font-semibold text-gray-900">{pageTitle}</span>
           </div>
-          <div className="relative" ref={userMenuRef}>
+          <div className="relative" ref={userMenuRefMobile}>
             <button
               type="button"
               onClick={() => setUserMenuOpen((v) => !v)}
