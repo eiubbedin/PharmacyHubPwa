@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 
 type Profile = {
   role: "pharmacist_admin" | "pharmacist_staff" | "department";
@@ -277,6 +278,7 @@ export default function ComenziPage() {
   const [items, setItems] = useState<OrderSession[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [exportingXlsxId, setExportingXlsxId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVA" | "FINALIZATA">("ALL");
 
@@ -393,6 +395,51 @@ export default function ComenziPage() {
       await generatePdf(session);
     } finally {
       setExportingId(null);
+    }
+  }
+
+  async function handleExportXlsx(session: OrderSession, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setExportingXlsxId(session.id);
+    try {
+      const { data: rawLines } = await supabase
+        .from("orders")
+        .select("cantitate_comandata, medicament_id")
+        .eq("order_session_id", session.id);
+
+      if (!rawLines || rawLines.length === 0) { alert("Nu există linii."); return; }
+
+      const medIds = rawLines.map((r: any) => r.medicament_id);
+      const { data: meds } = await supabase
+        .from("medicines")
+        .select("id, denumire, concentratie, cantitate_cutie, departament")
+        .in("id", medIds);
+
+      const medMap: Record<number, any> = {};
+      for (const m of (meds ?? []) as any[]) medMap[m.id] = m;
+
+      const rows = (rawLines as any[]).map((r) => {
+        const m = medMap[r.medicament_id] ?? {};
+        return {
+          Denumire: m.denumire ?? "-",
+          Concentratie: m.concentratie ?? "-",
+          Ambalaj: m.cantitate_cutie ?? "-",
+          Departament: (m.departament ?? "-").toUpperCase(),
+          Cantitate: r.cantitate_comandata,
+        };
+      });
+
+      rows.sort((a: any, b: any) => a.Departament.localeCompare(b.Departament) || a.Denumire.localeCompare(b.Denumire));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [{ wch: 35 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 10 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Comanda");
+      const safeTitle = (session.nume_comanda || `Comanda_${session.id}`).replace(/[/:\\]/g, "-");
+      XLSX.writeFile(wb, `${safeTitle}.xlsx`);
+    } finally {
+      setExportingXlsxId(null);
     }
   }
 
@@ -533,6 +580,24 @@ export default function ComenziPage() {
                     </svg>
                   )}
                   PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingXlsxId === s.id}
+                  onClick={(e) => handleExportXlsx(s, e)}
+                  className="flex items-center gap-1 rounded-lg border border-green-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-green-700 hover:bg-green-50 disabled:opacity-60 transition-colors"
+                >
+                  {exportingXlsxId === s.id ? (
+                    <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  ) : (
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M14 3v18" />
+                    </svg>
+                  )}
+                  XLS
                 </button>
                 {!isDepartment && !isPharmacistStaff && (
                   <>

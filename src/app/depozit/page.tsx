@@ -29,6 +29,12 @@ type OrderLine = {
   };
 };
 
+type DepotPickup = {
+  id: number;
+  picked_at: string;
+  user_id: string;
+};
+
 const DEPT_ORDER = ["IMPORT", "TABLETA", "TM"];
 const DEPT_LABELS: Record<string, string> = {
   IMPORT: "IMPORT",
@@ -46,10 +52,15 @@ export default function DepozitPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<OrderSession | null>(null);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [search, setSearch] = useState("");
   const [activeDeptFilter, setActiveDeptFilter] = useState<string | null>(null);
+  const [pickup, setPickup] = useState<DepotPickup | null>(null);
+  const [pickingUp, setPickingUp] = useState(false);
+  const [checkedLineIds, setCheckedLineIds] = useState<Set<number>>(new Set());
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   useEffect(() => {
     void loadAll();
@@ -62,6 +73,7 @@ export default function DepozitPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login?next=/depozit"); return; }
+      setUserId(user.id);
 
       const { data: profileData } = await supabase
         .from("profiles")
@@ -86,7 +98,7 @@ export default function DepozitPage() {
       const active = ((sessions as OrderSession[] | null) ?? [])[0] ?? null;
       setActiveSession(active);
 
-      if (!active) { setLines([]); return; }
+      if (!active) { setLines([]); setPickup(null); setCheckedLineIds(new Set()); return; }
 
       const { data: orderLines, error: lErr } = await supabase
         .from("orders")
@@ -100,6 +112,27 @@ export default function DepozitPage() {
         (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
       );
       setLines(sorted);
+
+      // Încarcă preluarea existentă
+      const { data: pickupData } = await supabase
+        .from("depot_pickups")
+        .select("id, picked_at, user_id")
+        .eq("order_session_id", active.id)
+        .eq("user_id", user.id)
+        .limit(1);
+      setPickup(((pickupData as DepotPickup[] | null) ?? [])[0] ?? null);
+
+      // Încarcă produsele bifate
+      const lineIds = sorted.map((l) => l.id);
+      if (lineIds.length > 0) {
+        const { data: checks } = await supabase
+          .from("depot_line_checks")
+          .select("order_line_id")
+          .eq("user_id", user.id)
+          .in("order_line_id", lineIds);
+        const checked = new Set((checks ?? []).map((c: { order_line_id: number }) => c.order_line_id));
+        setCheckedLineIds(checked);
+      }
     } catch (e) {
       console.warn("depozit load error", e);
       setError("Nu s-au putut încărca datele.");
@@ -148,6 +181,49 @@ export default function DepozitPage() {
     }
     return map;
   }, [lines]);
+
+  async function handlePickup() {
+    if (!activeSession || !userId || pickingUp) return;
+    setPickingUp(true);
+    try {
+      const { data, error } = await supabase
+        .from("depot_pickups")
+        .upsert({ order_session_id: activeSession.id, user_id: userId }, { onConflict: "order_session_id,user_id" })
+        .select("id, picked_at, user_id")
+        .limit(1);
+      if (error) throw error;
+      setPickup(((data as DepotPickup[] | null) ?? [])[0] ?? null);
+    } catch (e) {
+      console.warn("pickup error", e);
+    } finally {
+      setPickingUp(false);
+    }
+  }
+
+  async function handleToggleLine(lineId: number) {
+    if (!userId || togglingId !== null) return;
+    setTogglingId(lineId);
+    const isChecked = checkedLineIds.has(lineId);
+    try {
+      if (isChecked) {
+        await supabase
+          .from("depot_line_checks")
+          .delete()
+          .eq("order_line_id", lineId)
+          .eq("user_id", userId);
+        setCheckedLineIds((prev) => { const s = new Set(prev); s.delete(lineId); return s; });
+      } else {
+        await supabase
+          .from("depot_line_checks")
+          .upsert({ order_line_id: lineId, user_id: userId, checked: true }, { onConflict: "order_line_id,user_id" });
+        setCheckedLineIds((prev) => new Set(prev).add(lineId));
+      }
+    } catch (e) {
+      console.warn("toggle line error", e);
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   async function handleExportPdf() {
     if (!activeSession || lines.length === 0) return;
@@ -247,27 +323,61 @@ export default function DepozitPage() {
       {activeSession && (
         <>
           {/* Session header + PDF */}
-          <div className="flex items-start justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
-            <div>
-              <p className="font-semibold text-gray-900">
-                {activeSession.nume_comanda || `Comandă #${activeSession.id}`}
-              </p>
-              <p className="mt-0.5 text-xs text-gray-400">
-                {new Date(activeSession.created_at).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })}
-                {" · "}{lines.length} poziții
-              </p>
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {activeSession.nume_comanda || `Comandă #${activeSession.id}`}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  {new Date(activeSession.created_at).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })}
+                  {" · "}{lines.length} poziții
+                  {checkedLineIds.size > 0 && (
+                    <span className="ml-1.5 text-green-600 font-medium">
+                      · {checkedLineIds.size}/{lines.length} bifate
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={exporting}
+                onClick={() => void handleExportPdf()}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                {exporting ? "Export..." : "PDF"}
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={exporting}
-              onClick={() => void handleExportPdf()}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-              </svg>
-              {exporting ? "Export..." : "PDF"}
-            </button>
+
+            {/* Buton confirmare preluare */}
+            {pickup ? (
+              <div className="flex items-center gap-2 rounded-xl bg-green-50 border border-green-200 px-3 py-2">
+                <svg className="h-4 w-4 shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-green-800">Comandă preluată</p>
+                  <p className="text-[10px] text-green-600">
+                    {new Date(pickup.picked_at).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={pickingUp}
+                onClick={() => void handlePickup()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                {pickingUp ? "Se confirmă..." : "Am preluat comanda"}
+              </button>
+            )}
           </div>
 
           {/* Search */}
@@ -344,23 +454,42 @@ export default function DepozitPage() {
               </div>
               {group.lines.map((line, idx) => {
                 const med = line.medicines;
+                const isChecked = checkedLineIds.has(line.id);
+                const isToggling = togglingId === line.id;
                 return (
                   <div
                     key={line.id}
-                    className={`flex items-center gap-3 px-4 py-3 ${idx < group.lines.length - 1 ? "border-b border-gray-100" : ""}`}
+                    className={`flex items-center gap-3 px-4 py-3 transition-colors ${isChecked ? "bg-green-50" : ""} ${idx < group.lines.length - 1 ? "border-b border-gray-100" : ""}`}
                   >
+                    {/* Checkbox */}
+                    <button
+                      type="button"
+                      disabled={isToggling}
+                      onClick={() => void handleToggleLine(line.id)}
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                        isChecked
+                          ? "border-green-500 bg-green-500"
+                          : "border-gray-300 bg-white hover:border-green-400"
+                      } disabled:opacity-50`}
+                    >
+                      {isChecked && (
+                        <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-sm font-medium text-gray-900">{med?.denumire || "—"}</span>
+                        <span className={`text-sm font-medium ${isChecked ? "text-gray-400 line-through" : "text-gray-900"}`}>{med?.denumire || "—"}</span>
                         {med?.concentratie && (
-                          <span className="text-sm text-gray-500">{med.concentratie}</span>
+                          <span className={`text-sm ${isChecked ? "text-gray-400" : "text-gray-500"}`}>{med.concentratie}</span>
                         )}
                       </div>
                       {med?.cantitate_cutie && (
                         <p className="text-xs text-gray-400">{med.cantitate_cutie}</p>
                       )}
                     </div>
-                    <span className="shrink-0 text-sm font-semibold text-green-600">
+                    <span className={`shrink-0 text-sm font-semibold ${isChecked ? "text-gray-400" : "text-green-600"}`}>
                       x{line.cantitate_comandata}
                     </span>
                   </div>
