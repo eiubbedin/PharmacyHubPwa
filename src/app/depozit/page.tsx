@@ -83,7 +83,7 @@ export default function DepozitPage() {
 
       if (!active) { setLines([]); return; }
 
-      // Fetch toate liniile comenzii active, filtrat pe departamentul userului
+      // Fetch toate liniile comenzii active (fara filtru pe departament)
       const { data: orderLines, error: lErr } = await supabase
         .from("orders")
         .select("id, cantitate_comandata, medicines(denumire, concentratie, cantitate_cutie, departament)")
@@ -92,14 +92,11 @@ export default function DepozitPage() {
       if (lErr) throw lErr;
 
       const raw = (orderLines ?? []) as unknown as OrderLine[];
-      const dept = p.department?.toUpperCase();
-      const filtered = raw
-        .filter((l) => (l.medicines?.departament ?? "").toUpperCase() === dept)
-        .sort((a, b) =>
-          (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
-        );
+      const sorted = [...raw].sort((a, b) =>
+        (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
+      );
 
-      setLines(filtered);
+      setLines(sorted);
     } catch (e) {
       console.warn("depozit load error", e);
       setError("Nu s-au putut încărca datele.");
@@ -163,7 +160,7 @@ export default function DepozitPage() {
               <p className="mt-0.5 text-xs text-gray-400">
                 {new Date(activeSession.created_at).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })}
                 {" · "}
-                {lines.length} poziții din departamentul {deptLabel}
+                {lines.length} poziții
               </p>
             </div>
 

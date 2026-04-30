@@ -88,14 +88,11 @@ export default function DepozitIstoricDetailPage() {
       if (lErr) throw lErr;
 
       const raw = (orderLines ?? []) as unknown as OrderLine[];
-      const dept = p.department?.toUpperCase();
-      const filtered = raw
-        .filter((l) => (l.medicines?.departament ?? "").toUpperCase() === dept)
-        .sort((a, b) =>
-          (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
-        );
+      const sorted = [...raw].sort((a, b) =>
+        (a.medicines?.denumire ?? "").localeCompare(b.medicines?.denumire ?? "", "ro-RO")
+      );
 
-      setLines(filtered);
+      setLines(sorted);
     } catch (e) {
       console.warn("depozit detail error", e);
       setError("Nu s-au putut încărca detaliile comenzii.");
@@ -157,7 +154,7 @@ export default function DepozitIstoricDetailPage() {
 
           {/* Lines */}
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            Produse – {deptLabel} ({lines.length})
+            Produse ({lines.length})
           </p>
 
           {lines.length === 0 && (
