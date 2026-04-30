@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -213,16 +214,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Sidebar */}
         <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-gray-200 bg-white">
           {/* Logo */}
-          <div className="flex h-14 items-center gap-3 border-b border-gray-200 px-4">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-              <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-gray-900">PharmacyHub</div>
-              <div className="text-[11px] text-gray-400">F35 Comenzi</div>
-            </div>
+          <div className="flex h-14 items-center border-b border-gray-200 px-4">
+            <Image
+              src="/logo-heliofarm.png"
+              alt="Farmaciile Heliofarm"
+              width={160}
+              height={40}
+              className="object-contain"
+              priority
+            />
           </div>
 
           {/* Nav */}
@@ -313,13 +313,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Mobile layout ── */}
       <div className="flex flex-col lg:hidden">
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-              <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
-            <span className="text-sm font-semibold text-gray-900">{pageTitle}</span>
+          <div className="flex items-center gap-3">
+            <Image
+              src="/logo-heliofarm.png"
+              alt="Farmaciile Heliofarm"
+              width={110}
+              height={28}
+              className="object-contain"
+              priority
+            />
+            <span className="text-sm font-semibold text-gray-500">|</span>
+            <span className="text-sm font-medium text-gray-700">{pageTitle}</span>
           </div>
           <div className="relative" ref={userMenuRefMobile}>
             <button
