@@ -99,6 +99,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [showLogoutToast, setShowLogoutToast] = useState(false);
   const userMenuRefDesktop = useRef<HTMLDivElement | null>(null);
   const userMenuRefMobile = useRef<HTMLDivElement | null>(null);
   const { state: pushState, subscribe: subscribePush } = usePushNotifications(
@@ -148,7 +149,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setUserMenuOpen(false);
     try {
       await supabase.auth.signOut();
-    } finally {
+      setShowLogoutToast(true);
+      setTimeout(() => { window.location.href = "/login"; }, 1200);
+    } catch {
       setLoggingOut(false);
       window.location.href = "/login";
     }
@@ -186,6 +189,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Toast logout */}
+      {showLogoutToast && (
+        <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+          <svg className="h-4 w-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Deconectat cu succes
+        </div>
+      )}
+
       {/* ── Desktop layout ── */}
       <div className="hidden lg:flex lg:min-h-screen">
         {/* Sidebar */}

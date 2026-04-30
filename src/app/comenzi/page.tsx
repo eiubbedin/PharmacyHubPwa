@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -277,6 +277,8 @@ export default function ComenziPage() {
   const [items, setItems] = useState<OrderSession[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVA" | "FINALIZATA">("ALL");
 
   useEffect(() => {
     async function load() {
@@ -323,6 +325,15 @@ export default function ComenziPage() {
 
   const isDepartment = profile?.role === "department";
   const isPharmacistStaff = profile?.role === "pharmacist_staff";
+
+  const filteredItems = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return items.filter((s) => {
+      const matchSearch = !q || (s.nume_comanda ?? "").toLowerCase().includes(q);
+      const matchStatus = statusFilter === "ALL" || s.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [items, search, statusFilter]);
 
   async function handleDeleteSession(session: OrderSession, e: React.MouseEvent) {
     e.preventDefault();
@@ -437,8 +448,45 @@ export default function ComenziPage() {
         </div>
       )}
 
+      {/* Search */}
+      <div className="relative">
+        <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Caută după nume comandă..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        )}
+      </div>
+
+      {/* Filtre status */}
+      <div className="flex gap-2">
+        {(["ALL", "ACTIVA", "FINALIZATA"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setStatusFilter(f)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              statusFilter === f
+                ? "bg-gray-900 text-white"
+                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {f === "ALL" ? `Toate (${items.length})` : f === "ACTIVA" ? `Active (${items.filter(s => s.status === "ACTIVA").length})` : `Finalizate (${items.filter(s => s.status === "FINALIZATA").length})`}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {items.map((s, idx) => {
+        {filteredItems.map((s, idx) => {
           const created = new Date(s.created_at);
           const dateLabel = created.toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" });
           const isActive = s.status === "ACTIVA";
@@ -447,7 +495,7 @@ export default function ComenziPage() {
           return (
             <div
               key={s.id}
-              className={`flex items-center gap-3 px-4 py-3 ${idx < items.length - 1 ? "border-b border-gray-100" : ""}`}
+              className={`flex items-center gap-3 px-4 py-3 ${idx < filteredItems.length - 1 ? "border-b border-gray-100" : ""}`}
             >
               <Link href={`/comenzi/${s.id}`} className="min-w-0 flex-1 block">
                 <div className="flex flex-wrap items-center gap-2">
@@ -515,9 +563,9 @@ export default function ComenziPage() {
           );
         })}
 
-        {items.length === 0 && !error && (
+        {filteredItems.length === 0 && !error && (
           <div className="px-6 py-12 text-center text-sm text-gray-400">
-            Nu există comenzi înregistrate încă.
+            {items.length === 0 ? "Nu există comenzi înregistrate încă." : "Nicio comandă găsită."}
           </div>
         )}
       </div>

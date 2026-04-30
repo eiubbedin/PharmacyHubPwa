@@ -608,6 +608,12 @@ export default function ReceptiePage() {
                   const qty = item.orderLine.cantitate_comandata;
                   const inOrder = activeOrderMedicineIds.includes(item.orderLine.medicament_id);
 
+                  const dept = item.orderLine.medicines?.departament?.toUpperCase() || null;
+                  const deptColor: Record<string, string> = {
+                    IMPORT: "bg-purple-100 text-purple-700",
+                    TABLETA: "bg-orange-100 text-orange-700",
+                    TM: "bg-teal-100 text-teal-700",
+                  };
                   return (
                     <li
                       key={item.orderLine.id}
@@ -623,10 +629,15 @@ export default function ReceptiePage() {
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <p className="truncate text-sm font-medium text-zinc-900">
                               {name} x{qty}
                             </p>
+                            {dept && (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${deptColor[dept] ?? "bg-gray-100 text-gray-600"}`}>
+                                {dept}
+                              </span>
+                            )}
                             {inOrder && (
                               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">
                                 În comandă

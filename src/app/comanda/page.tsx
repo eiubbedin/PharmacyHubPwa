@@ -568,6 +568,28 @@ export default function ComandaActivaPage() {
               {session.descriere && session.descriere !== "EMPTY" && (
                 <p className="mt-1 text-xs text-zinc-600">{session.descriere}</p>
               )}
+              {/* Badge-uri departamente */}
+              {lines.length > 0 && (() => {
+                const counts: Record<string, number> = {};
+                for (const l of lines) {
+                  const d = (l.medicines?.departament ?? "").toUpperCase().trim() || "ALTELE";
+                  counts[d] = (counts[d] ?? 0) + 1;
+                }
+                const deptColor: Record<string, string> = {
+                  IMPORT: "bg-purple-100 text-purple-700",
+                  TABLETA: "bg-orange-100 text-orange-700",
+                  TM: "bg-teal-100 text-teal-700",
+                };
+                return (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {Object.entries(counts).sort(([a],[b]) => a.localeCompare(b)).map(([dept, cnt]) => (
+                      <span key={dept} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${deptColor[dept] ?? "bg-gray-100 text-gray-600"}`}>
+                        {dept} ×{cnt}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div className="text-right text-xs text-zinc-600">
               <p>Total medicamente: {session.total_medicamente ?? lines.length}</p>

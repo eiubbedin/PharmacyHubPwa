@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 export default function LoginPage() {
   const router = useRouter();
   const [nextPath, setNextPath] = useState("/");
-  const [email, setEmail] = useState("f35_owner@local.ro");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
